@@ -26,7 +26,6 @@ WriteMakefile(
     },
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
       (
-       #ABSTRACT_FROM  => 'lib/Webqq/Client.pm', # retrieve abstract from module
-       ABSTRACT       => 'A IRC server base on Mojolicious',
+       ABSTRACT       => 'A Chinese IRC server base on Mojolicious',
        AUTHOR         => 'sjdy521 <sjdy521@163.com>') : ()),
 );
