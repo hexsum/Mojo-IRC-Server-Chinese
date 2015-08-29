@@ -1,3 +1,7 @@
+2015-08-29 Mojo::IRC::Server v1.0.3
+1）修复bug
+2）重新调整代码框架
+
 2015-08-29 Mojo::IRC::Server v1.0.2
 添加发布到cpan相关的支持文件
 
