@@ -141,16 +141,7 @@ sub ready {
             return;
         }
         if($client->{nick} ne "*"){
-            $s->send($client,fullname($client),"NICK",$nick);
-            for my $c (grep {$_->{id} ne $client->{id}} @{$s->{client}}){
-                for my $channel_id (keys $client->{channel}){
-                    if(exists $c->{channel}{$channel_id}){
-                        $s->send($c,fullname($client),"NICK",$nick);
-                    }
-                }
-            }
-            $s->info("[$client->{nick}] 修改昵称为 [$nick]");
-            $client->{nick} = $nick;
+            $s->change_nick($client,$nick);
         }
         else{
             $client->{nick} = $nick;
@@ -184,15 +175,6 @@ sub ready {
         my ($s,$client,$msg)=@_;
         my $channel_id = $msg->{params}[0];
         $s->join_channel($client,$channel_id);
-        $s->send($client,fullname($client),"JOIN",$channel_id);
-        $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} @{$s->client}));
-        $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-        $s->send($client,$s->servername,"329",$client->{nick},$channel_id,time());
-
-        for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
-            $s->send($_,fullname($client),"JOIN",$channel_id); 
-        }
-
         $s->info("[$client->{nick}] 加入频道 $channel_id");
         
     });
@@ -202,20 +184,14 @@ sub ready {
         my $channel_id = $msg->{params}[0];
         my $part_info = $msg->{params}[1];
         $s->part_channel($client,$channel_id,$part_info);
-        for(grep {$client->{id} ne $_->{id}} @{$s->client}){
-            $s->send($_,fullname($client),"PART",$channel_id,$part_info);
-        }
         $s->info("[$client->{nick}] 离开频道 $channel_id");
     });
 
     $s->on(quit=>sub{
         my ($s,$client,$msg)=@_;
         my $quit_reason = $msg->{params}[0];
-        $s->del_client($client);
+        $s->quit($client,$quit_reason);
         $s->info("[$client->{nick}] 已退出($quit_reason)");
-        for(grep {$client->{id} ne $_->{id}} @{$s->client}){
-            $s->send($_,fullname($client),"QUIT",$quit_reason);
-        }
     });
     $s->on(privmsg=>sub{
         my ($s,$client,$msg)=@_;
@@ -259,6 +235,36 @@ sub fullname{
     "$client->{nick}!$client->{user}\@$client->{host}"; 
 }
 
+sub quit{
+    my $s =shift;
+    my $client = shift;
+    my $quit_reason = shift;
+    $s->info("[$client->{nick}] 已退出($quit_reason)");
+    for my $c (grep {$client->{id} ne $_->{id}} @{$s->client}){
+        for my $channel_id (keys $client->{channel}){
+            if(exists $c->{channel}{$channel_id}){
+                $s->send($c,fullname($client),"QUIT",$quit_reason);
+            }
+        }
+    }
+    $s->del_client($client);
+}
+sub change_nick{
+    my $s = shift;
+    my $client = shift;
+    my $nick = shift;
+    $s->send($client,fullname($client),"NICK",$nick);
+    $s->info("[$client->{nick}] 修改昵称为 [$nick]");
+    for my $c (grep {$_->{id} ne $client->{id}} @{$s->{client}}){
+        for my $channel_id (keys $client->{channel}){
+            if(exists $c->{channel}{$channel_id}){
+                $s->send($c,fullname($client),"NICK",$nick);
+            }
+        }
+    }
+    $client->{nick} = $nick;
+}
+
 sub part_channel{
     my $s =shift;
     my $client = shift;
@@ -266,12 +272,23 @@ sub part_channel{
     my $part_info = shift;
     delete $client->{channel}{$channel_id};
     $s->send($client,fullname($client),"PART",$channel_id,$part_info);
+    for (grep { exists $_->{channel}{$channel_id} } grep {$_->{id} ne $client->{id}} @{$s->{client}}){
+        $s->send($_,fullname($client),"PART",$channel_id,$part_info);
+    }
 }
 sub join_channel{
     my $s =shift;
     my $client = shift;
     my $channel_id = shift;
     $client->{channel}{$channel_id} = 1;
+    $s->send($client,fullname($client),"JOIN",$channel_id);
+    $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} @{$s->client}));
+    $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
+    $s->send($client,$s->servername,"329",$client->{nick},$channel_id,time());
+
+    for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
+        $s->send($_,fullname($client),"JOIN",$channel_id);
+    }
 }
 sub add_client{
     my $s = shift;  
