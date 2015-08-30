@@ -68,12 +68,12 @@ sub ready {
         my $client = {
             id  =>$id,
             name=>$stream->handle->peerhost  . ":". $stream->handle->peerport,
-            user=>undef,
+            user=>"",
             host=>$stream->handle->peerhost,
             port=>$stream->handle->peerport,
             nick=>"*",
-            mode=>undef,
-            realname=>undef,
+            mode=>"i",
+            realname=>"",
             stream=>$stream,
             buffer=>'',
             channel=>{},
@@ -110,6 +110,8 @@ sub ready {
             elsif($msg->{command} eq "PRIVMSG"){$s->emit(privmsg=>$client,$msg)} 
             elsif($msg->{command} eq "QUIT"){$s->emit(quit=>$client,$msg)} 
             elsif($msg->{command} eq "WHO"){$s->emit(who=>$client,$msg)} 
+            elsif($msg->{command} eq "LIST"){$s->emit(list=>$client,$msg)} 
+            elsif($msg->{command} eq "TOPIC"){$s->emit(topic=>$client,$msg)} 
         });
         $client->{stream}->on(error=>sub{
             my ($stream, $err) = @_;
@@ -151,7 +153,7 @@ sub ready {
     $s->on(user=>sub{
         my ($s,$client,$msg)=@_;
         $client->{user} = $msg->{params}[0];
-        $client->{mode} = $msg->{params}[1]; 
+        #$client->{mode} = $msg->{params}[1]; 
         $client->{realname} = $msg->{params}[3]; 
         $s->send($client,$s->servername,"001",$client->{nick},"欢迎来到 Mojo IRC Network " . fullname($client));
         #$s->send($client,$s->servername,"002",$client->{nick},"Your host is " . $s->servername . ", running version Mojo-IRC-Server-1.0");
@@ -205,8 +207,28 @@ sub ready {
     });
     $s->on(mode=>sub{
         my ($s,$client,$msg)=@_;
-        my $channel_id = $msg->{params}[0];
-        $s->send($client,$s->servername,"324",$client->{nick},$channel_id,"+");
+        if(substr($msg->{params}[0],0,1) eq "#" ){
+            my $channel_id = $msg->{params}[0];
+            my $channel_mode = $msg->{params}[1];
+            if(defined $channel_mode){
+                $s->set_channel_mode($channel_id,$channel_mode);
+                $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$channel_mode);
+            }
+            else{
+                $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$client->{channel}{$channel_id}{mode});
+            }
+        }
+        else{
+            my $nick = $msg->{params}[0];
+            my $mode = $msg->{params}[1];
+            if(defined $mode){
+                $s->set_user_mode($client,$mode);
+                $s->send($client,fullname($client),"MODE",$client->{nick},$mode);
+            }
+            else{
+                $s->send($client,fullname($client),"MODE",$client->{nick},$client->{mode});
+            }
+        }
     });
 
     $s->on(ping=>sub{
@@ -227,9 +249,84 @@ sub ready {
         }
         $s->send($client,$s->servername,"315",$client->{nick},$channel_id,"End of WHO list");
     });
+    $s->on(list=>sub{
+        my ($s,$client,$msg)=@_;
+        my %channel;
+        for my $c (@{$s->client}){
+            for my $channel_id (keys %{$c->{channel}}){
+                if(exists $channel{$channel_id}){
+                    $channel{$channel_id}{count}++;
+                }
+                else{
+                    $channel{$channel_id} = {mode=>$c->{channel}{$channel_id}{mode},topic=>$c->{channel}{$channel_id}{topic} ,count=>1}; 
+                }
+            }
+        }
+        for(keys %channel){
+            $s->send($client,$s->servername,"322",$client->{nick},$_,$channel{$_}{count},$channel{$_}{topic});
+        }
+        $s->send($client,$s->servername,"323",$client->{nick},"End of LIST");
+    });
+    $s->on(topic=>sub{
+        my ($s,$client,$msg)=@_;
+        my $channel_id = $msg->{params}[0]; 
+        my $topic = $msg->{params}[1];
+        $s->set_channel_topic($client,$channel_id,$topic);
+    });
 
 }
 
+sub set_user_mode{
+    my $s = shift;
+    my $client = shift;
+    my $mode = shift;
+    my %mode = map {$_=>1} split //,$client->{mode};
+    if(substr($mode,0,1) eq "+"){
+        $mode{$_}=1 for  split //,substr($mode,1,); 
+    }
+    elsif(substr($mode,0,1) eq "-"){
+        delete $mode{$_} for  split //,substr($mode,1,);
+    }
+    else{
+        %mode = ();
+        $mode{$_}=1 for  split //,$mode;
+    }
+    $client->{mode} = join "",keys %mode;
+}
+sub set_channel_mode{
+    my $s = shift;
+    my $channel_id = shift;
+    my $mode = shift;
+
+    for my $c(@{$s->client}){
+        if(exists $c->{channel}{$channel_id}){
+            my %mode = map {$_=>1} split //,$c->{channel}{$channel_id}{mode};
+            if(substr($mode,0,1) eq "+"){
+                $mode{$_}=1 for  split //,substr($mode,1,);
+            }
+            elsif(substr($mode,0,1) eq "-"){
+                delete $mode{$_} for  split //,substr($mode,1,);
+            }
+            else{
+                %mode = ();
+                $mode{$_}=1 for  split //,$mode;
+            }            
+            $c->{channel}{$channel_id}{mode} = join "",keys %mode;
+        }
+    }
+}
+sub set_channel_topic{
+    my $s = shift;
+    my $client = shift;
+    my $channel_id = shift;
+    my $topic = shift;
+    for my $c (@{$s->client}) {
+        if(exists $c->{channel}{$channel_id}){
+            $c->{channel}{$channel_id}{topic} = $topic;
+        }
+    }
+    $s->send($client,fullname($client),"TOPIC",$channel_id,$topic);
+}
 sub fullname{
     my $client = shift;
     "$client->{nick}!$client->{user}\@$client->{host}"; 
@@ -280,7 +377,7 @@ sub join_channel{
     my $s =shift;
     my $client = shift;
     my $channel_id = shift;
-    $client->{channel}{$channel_id} = 1;
+    $client->{channel}{$channel_id} = {mode=>"i",topic=>""};
     $s->send($client,fullname($client),"JOIN",$channel_id);
     $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} @{$s->client}));
     $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
