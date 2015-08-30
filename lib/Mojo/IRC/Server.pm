@@ -241,7 +241,7 @@ sub quit{
     my $quit_reason = shift;
     $s->info("[$client->{nick}] 已退出($quit_reason)");
     for my $c (grep {$client->{id} ne $_->{id}} @{$s->client}){
-        for my $channel_id (keys $client->{channel}){
+        for my $channel_id (keys %{$client->{channel}}){
             if(exists $c->{channel}{$channel_id}){
                 $s->send($c,fullname($client),"QUIT",$quit_reason);
             }
@@ -256,7 +256,7 @@ sub change_nick{
     $s->send($client,fullname($client),"NICK",$nick);
     $s->info("[$client->{nick}] 修改昵称为 [$nick]");
     for my $c (grep {$_->{id} ne $client->{id}} @{$s->{client}}){
-        for my $channel_id (keys $client->{channel}){
+        for my $channel_id (keys %{$client->{channel}}){
             if(exists $c->{channel}{$channel_id}){
                 $s->send($c,fullname($client),"NICK",$nick);
             }
