@@ -1,5 +1,5 @@
 package Mojo::IRC::Server;
-$Mojo::IRC::Server::VERSION = "1.0.3";
+$Mojo::IRC::Server::VERSION = "1.0.4";
 use strict;
 use Encode;
 use Encode::Locale;
