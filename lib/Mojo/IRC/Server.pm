@@ -66,17 +66,18 @@ sub ready {
         my ($loop, $stream) = @_;
         my $id = $stream->handle->sockhost . ":" . $stream->handle->sockport . ":" . $stream->handle->peerhost  . ":". $stream->handle->peerport;
         my $client = {
-            id  =>$id,
-            name=>$stream->handle->peerhost  . ":". $stream->handle->peerport,
-            user=>"",
-            host=>$stream->handle->peerhost,
-            port=>$stream->handle->peerport,
-            nick=>"*",
-            mode=>"i",
-            realname=>"",
-            stream=>$stream,
-            buffer=>'',
-            channel=>{},
+            id  =>  $id,
+            name=>  $stream->handle->peerhost  . ":". $stream->handle->peerport,
+            user=>  "",
+            host=>  $stream->handle->peerhost,
+            port=>  $stream->handle->peerport,
+            nick=>  "*",
+            mode=>  "i",
+            stream  =>$stream,
+            buffer  =>'',
+            virtual =>0,
+            channel =>{},
+            realname =>"",
         };
         $client->{stream}->timeout(0);
         $s->emit(new_client=>$client);
@@ -110,6 +111,7 @@ sub ready {
             elsif($msg->{command} eq "PRIVMSG"){$s->emit(privmsg=>$client,$msg)} 
             elsif($msg->{command} eq "QUIT"){$s->emit(quit=>$client,$msg)} 
             elsif($msg->{command} eq "WHO"){$s->emit(who=>$client,$msg)} 
+            elsif($msg->{command} eq "WHOIS"){$s->emit(who=>$client,$msg)} 
             elsif($msg->{command} eq "LIST"){$s->emit(list=>$client,$msg)} 
             elsif($msg->{command} eq "TOPIC"){$s->emit(topic=>$client,$msg)} 
         });
@@ -136,19 +138,7 @@ sub ready {
     $s->on(nick=>sub{
         my ($s,$client,$msg)=@_;
         my $nick = $msg->{params}[0];
-        my $c = $s->search_client(nick=>$nick);
-        if(defined $c and $c->{id} ne $client->{id}){
-            $s->send($client,$s->servername,"433",$client->{nick},$nick,'昵称已经被使用');
-            $s->info("昵称 [$nick] 已经被占用");
-            return;
-        }
-        if($client->{nick} ne "*"){
-            $s->change_nick($client,$nick);
-        }
-        else{
-            $client->{nick} = $nick;
-            $s->info("[$client->{name}] 设置昵称为 [$nick]");
-        }
+        $s->set_nick($client,$nick);
     });
     $s->on(user=>sub{
         my ($s,$client,$msg)=@_;
@@ -177,8 +167,6 @@ sub ready {
         my ($s,$client,$msg)=@_;
         my $channel_id = $msg->{params}[0];
         $s->join_channel($client,$channel_id);
-        $s->info("[$client->{nick}] 加入频道 $channel_id");
-        
     });
 
     $s->on(part=>sub{
@@ -186,7 +174,6 @@ sub ready {
         my $channel_id = $msg->{params}[0];
         my $part_info = $msg->{params}[1];
         $s->part_channel($client,$channel_id,$part_info);
-        $s->info("[$client->{nick}] 离开频道 $channel_id");
     });
 
     $s->on(quit=>sub{
@@ -197,13 +184,27 @@ sub ready {
     });
     $s->on(privmsg=>sub{
         my ($s,$client,$msg)=@_;
-        my $channel_id = $msg->{params}[0];
-        my $content = $msg->{params}[1];
-        for (grep { exists $_->{channel}{$channel_id} } grep {$_->{id} ne $client->{id}} @{$s->client}){
-            $s->send($_,fullname($client),"PRIVMSG",$channel_id,$content);
+        if(substr($msg->{params}[0],0,1) eq "#" ){
+            my $channel_id = $msg->{params}[0];
+            my $content = $msg->{params}[1];
+            for (grep { exists $_->{channel}{$channel_id} } grep {$_->{id} ne $client->{id}} @{$s->client}){
+                $s->send($_,fullname($client),"PRIVMSG",$channel_id,$content);
+            }
+            $s->info({level=>"频道消息",title=>"$client->{nick}|$channel_id :"},$content);
         }
-
-        $s->info("[$client->{nick}] 在频道 $channel_id 说: $content");
+        else{
+            my $nick = $msg->{params}[0];
+            my $content = $msg->{params}[1];
+            my $c = $s->search_client(nick=>$nick);
+            if(defined $c){
+                #$s->send($client,fullname($client),"PRIVMSG",$nick,$content); 
+                $s->send($c,fullname($client),"PRIVMSG",$nick,$content);
+                $s->info({level=>"私信消息",title=>"[$client->{nick}]->[$nick] :"},$content);
+            }
+            else{
+                $s->send($client,$s->servername,"401",$client->{nick},$nick,"No such nick")
+            }
+        }
     });
     $s->on(mode=>sub{
         my ($s,$client,$msg)=@_;
@@ -211,8 +212,7 @@ sub ready {
             my $channel_id = $msg->{params}[0];
             my $channel_mode = $msg->{params}[1];
             if(defined $channel_mode){
-                $s->set_channel_mode($channel_id,$channel_mode);
-                $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$channel_mode);
+                $s->set_channel_mode($client,$channel_id,$channel_mode);
             }
             else{
                 $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$client->{channel}{$channel_id}{mode});
@@ -223,7 +223,6 @@ sub ready {
             my $mode = $msg->{params}[1];
             if(defined $mode){
                 $s->set_user_mode($client,$mode);
-                $s->send($client,fullname($client),"MODE",$client->{nick},$mode);
             }
             else{
                 $s->send($client,fullname($client),"MODE",$client->{nick},$client->{mode});
@@ -244,27 +243,17 @@ sub ready {
     $s->on(who=>sub{
         my ($s,$client,$msg)=@_;
         my $channel_id = $msg->{params}[0];
-        for(@{$s->client}){
+        for(grep {exists $_->{channel}{$channel_id}} @{$s->client}){
             $s->send($client,$s->servername,"352",$client->{nick},$channel_id,$_->{user},$_->{host},$s->servername,$_->{nick},"H","0 $_->{realname}"); 
         }
         $s->send($client,$s->servername,"315",$client->{nick},$channel_id,"End of WHO list");
     });
     $s->on(list=>sub{
         my ($s,$client,$msg)=@_;
-        my %channel;
-        for my $c (@{$s->client}){
-            for my $channel_id (keys %{$c->{channel}}){
-                if(exists $channel{$channel_id}){
-                    $channel{$channel_id}{count}++;
-                }
-                else{
-                    $channel{$channel_id} = {mode=>$c->{channel}{$channel_id}{mode},topic=>$c->{channel}{$channel_id}{topic} ,count=>1}; 
-                }
-            }
-        }
-        for(keys %channel){
-            $s->send($client,$s->servername,"322",$client->{nick},$_,$channel{$_}{count},$channel{$_}{topic});
-        }
+        $s->each_channel(sub{
+            my($s,$channel) = @_;
+            $s->send($client,$s->servername,"322",$client->{nick},$channel->{id},$channel->{count},$channel->{topic});
+        });
         $s->send($client,$s->servername,"323",$client->{nick},"End of LIST");
     });
     $s->on(topic=>sub{
@@ -274,6 +263,24 @@ sub ready {
         $s->set_channel_topic($client,$channel_id,$topic);
     });
 
+}
+
+sub set_nick {
+    my $s = shift;
+    my $client = shift;
+    my $nick = shift;
+    my $c = $s->search_client(nick=>$nick);
+    if(defined $c and $c->{id} ne $client->{id}){
+        $s->send($client,$s->servername,"433",$client->{nick},$nick,'昵称已经被使用');
+        $s->info("昵称 [$nick] 已经被占用");
+    }
+    elsif($client->{nick} ne "*"){
+        $s->change_nick($client,$nick);
+    }
+    else{
+        $client->{nick} = $nick;
+        $s->info("[$client->{name}] 设置昵称为 [$nick]");
+    }
 }
 
 sub set_user_mode{
@@ -292,9 +299,12 @@ sub set_user_mode{
         $mode{$_}=1 for  split //,$mode;
     }
     $client->{mode} = join "",keys %mode;
+    $s->send($client,fullname($client),"MODE",$client->{nick},$mode);
+    $s->info("[$client->{nick}] 模式设置为: $client->{mode}");
 }
 sub set_channel_mode{
     my $s = shift;
+    my $client = shift;
     my $channel_id = shift;
     my $mode = shift;
 
@@ -314,6 +324,8 @@ sub set_channel_mode{
             $c->{channel}{$channel_id}{mode} = join "",keys %mode;
         }
     }
+    $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$mode);
+    $s->info("$channel_id 模式设置为: $client->{channel}{$channel_id}{mode}");
 }
 sub set_channel_topic{
     my $s = shift;
@@ -326,6 +338,11 @@ sub set_channel_topic{
         }
     }
     $s->send($client,fullname($client),"TOPIC",$channel_id,$topic);
+    for my $c (grep {$client->{id} ne $_->{id}} @{$s->client}){
+        $s->send($c,fullname($client),"TOPIC",$channel_id,$topic);
+    }
+    $s->info("$channel_id 主题设置为: $client->{channel}{$channel_id}{topic}");
+
 }
 sub fullname{
     my $client = shift;
@@ -336,7 +353,6 @@ sub quit{
     my $s =shift;
     my $client = shift;
     my $quit_reason = shift;
-    $s->info("[$client->{nick}] 已退出($quit_reason)");
     for my $c (grep {$client->{id} ne $_->{id}} @{$s->client}){
         for my $channel_id (keys %{$client->{channel}}){
             if(exists $c->{channel}{$channel_id}){
@@ -344,6 +360,7 @@ sub quit{
             }
         }
     }
+    $s->info("[$client->{nick}] 已退出($quit_reason)");
     $s->del_client($client);
 }
 sub change_nick{
@@ -351,7 +368,6 @@ sub change_nick{
     my $client = shift;
     my $nick = shift;
     $s->send($client,fullname($client),"NICK",$nick);
-    $s->info("[$client->{nick}] 修改昵称为 [$nick]");
     for my $c (grep {$_->{id} ne $client->{id}} @{$s->{client}}){
         for my $channel_id (keys %{$client->{channel}}){
             if(exists $c->{channel}{$channel_id}){
@@ -359,6 +375,7 @@ sub change_nick{
             }
         }
     }
+    $s->info("[$client->{nick}] 修改昵称为 [$nick]");
     $client->{nick} = $nick;
 }
 
@@ -372,20 +389,29 @@ sub part_channel{
     for (grep { exists $_->{channel}{$channel_id} } grep {$_->{id} ne $client->{id}} @{$s->{client}}){
         $s->send($_,fullname($client),"PART",$channel_id,$part_info);
     }
+    $s->info("[$client->{nick}] 离开频道 $channel_id");
 }
 sub join_channel{
     my $s =shift;
     my $client = shift;
     my $channel_id = shift;
-    $client->{channel}{$channel_id} = {mode=>"i",topic=>""};
+    my $channel = $s->search_channel(id=>$channel_id);
+    if(defined $channel){
+        $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>$channel->{topic},ctime=>$channel->{ctime}};
+    }
+    else{
+        $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>"欢迎来到频道 $channel_id",ctime=>time()};
+    }
     $s->send($client,fullname($client),"JOIN",$channel_id);
-    $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} @{$s->client}));
+    $s->send($client,$s->servername,"332",$client->{nick},$channel_id,$client->{channel}{$channel_id}{topic});
+    $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} grep {exists $_->{channel}{$channel_id}}  @{$s->client}));
     $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-    $s->send($client,$s->servername,"329",$client->{nick},$channel_id,time());
+    $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime});
 
     for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
         $s->send($_,fullname($client),"JOIN",$channel_id);
     }
+    $s->info("[$client->{nick}] 加入频道 $channel_id");
 }
 sub add_client{
     my $s = shift;  
@@ -418,9 +444,53 @@ sub search_client {
     }
 }
 
+sub each_channel {
+    my $s = shift;
+    my $callback = shift;
+    my %channel;
+    for my $c (@{$s->client}){
+        for my $channel_id (keys %{$c->{channel}}){
+            if(exists $channel{$channel_id}){
+                $channel{$channel_id}{count}++;
+            }
+            else{
+                $channel{$channel_id} = {id=>$channel_id,topic=>$c->{channel}{$channel_id}{topic} ,count=>1};
+            }
+        }
+    }
+    for(values %channel){
+        $callback->($s,$_);
+    }
+}
+
+sub search_channel {
+    my $s = shift;
+    my %p = @_;
+    return if 0 == grep {defined $p{$_}} keys %p;
+    my %channel;
+    for my $c (@{$s->client}){
+        for my $channel_id (keys %{$c->{channel}}){
+            if(exists $channel{$channel_id}){
+                $channel{$channel_id}{count}++;
+            }
+            else{
+                $channel{$channel_id} = {id=>$channel_id,ctime=>$c->{channel}{$channel_id}{ctime},topic=>$c->{channel}{$channel_id}{topic} ,count=>1};
+            }
+        }
+    }
+    if(wantarray){
+        return grep {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} values %channel;
+    }
+    else{
+        return first {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} values %channel;
+    } 
+
+}
+
 sub send {
     my $s = shift;
     my $client = shift;
+    return if $client->{virtual} ;
     my($prefix,$command,@params)=@_;
     my $msg = "";
     #$msg .= defined $prefix ? ":$prefix " : ":" . $s->servername . " ";
