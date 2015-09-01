@@ -345,6 +345,7 @@ sub set_channel_topic{
 
 }
 sub fullname{
+    shift if ref $_[0] eq __PACKAGE__;
     my $client = shift;
     "$client->{nick}!$client->{user}\@$client->{host}"; 
 }
@@ -395,18 +396,19 @@ sub join_channel{
     my $s =shift;
     my $client = shift;
     my $channel_id = shift;
+    $channel_id = "#".$channel_id if substr($channel_id,0,1) ne "#";
     my $channel = $s->search_channel(id=>$channel_id);
     if(defined $channel){
         $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>$channel->{topic},ctime=>$channel->{ctime}};
     }
     else{
         $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>"欢迎来到频道 $channel_id",ctime=>time()};
-    }
+    }   
     $s->send($client,fullname($client),"JOIN",$channel_id);
     $s->send($client,$s->servername,"332",$client->{nick},$channel_id,$client->{channel}{$channel_id}{topic});
     $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} grep {exists $_->{channel}{$channel_id}}  @{$s->client}));
     $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-    $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime});
+    $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime} || time());
 
     for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
         $s->send($_,fullname($client),"JOIN",$channel_id);
@@ -421,6 +423,38 @@ sub add_client{
     else{push @{$s->client},$client;}
 }
 
+sub add_virtual_client {
+    my $s = shift;
+    my %opt = @_;
+    my $c = $s->search_client(id=>$opt{id});
+    return $c if defined $c;
+    while(1){
+        my $c = $s->search_client(nick=>$opt{nick});
+        if(defined $c){
+            if($opt{nick}=~/\((\d+)\)$/){
+                my $num = $1;$num++;
+                $opt{nick} = $opt{nick} . "($num)";
+            }
+            else{
+                $opt{nick} = $opt{nick} . "(1)";
+            }   
+        }
+        else{last}
+    }
+    my $virtual_client = {
+        id      => $opt{id},
+        name    => $opt{name},
+        user    => $opt{user},
+        host    => $opt{host} || "localhost",
+        port    => $opt{port} || "none",
+        nick    => $opt{nick},
+        virtual => 1,
+        mode    => "i",
+        realname => "",
+    };
+    $s->add_client($virtual_client);
+    return $virtual_client;
+}
 sub del_client{
     my $s = shift;
     my $client = shift;
