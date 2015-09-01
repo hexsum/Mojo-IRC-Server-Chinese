@@ -246,7 +246,7 @@ sub ready {
     $s->on(who=>sub{
         my ($s,$client,$msg)=@_;
         my $channel_id = $msg->{params}[0];
-        for(grep {exists $_->{channel}{$channel_id}} @{$s->client}){
+        for(grep {exists $_->{channel}{$channel_id} } @{$s->client}){
             $s->send($client,$s->servername,"352",$client->{nick},$channel_id,$_->{user},$_->{host},$s->servername,$_->{nick},"H","0 $_->{realname}"); 
         }
         $s->send($client,$s->servername,"315",$client->{nick},$channel_id,"End of WHO list");
@@ -282,8 +282,7 @@ sub set_nick {
         $s->change_nick($client,$nick);
     }
     else{
-        $client->{nick} = $nick;
-        $s->info("[$client->{name}] 设置昵称为 [$nick]");
+        $s->change_nick($client,$nick);
     }
 }
 
@@ -311,6 +310,8 @@ sub set_channel_mode{
     my $client = shift;
     my $channel_id = shift;
     my $mode = shift;
+
+    $mode  = "+" . $mode if (substr($mode,0,1) ne '+' and substr($mode,0,1) ne '-');
 
     for my $c(@{$s->client}){
         if(exists $c->{channel}{$channel_id}){
