@@ -142,6 +142,10 @@ sub ready {
     });
     $s->on(user=>sub{
         my ($s,$client,$msg)=@_;
+        if(defined $s->search_client(user=>$msg->{params}[0])){
+            $s->send($client,$s->servername,"446",$client->{nick},"该帐号已被使用");
+            return;
+        }
         $client->{user} = $msg->{params}[0];
         #$client->{mode} = $msg->{params}[1]; 
         $client->{realname} = $msg->{params}[3]; 
@@ -180,7 +184,6 @@ sub ready {
         my ($s,$client,$msg)=@_;
         my $quit_reason = $msg->{params}[0];
         $s->quit($client,$quit_reason);
-        $s->info("[$client->{nick}] 已退出($quit_reason)");
     });
     $s->on(privmsg=>sub{
         my ($s,$client,$msg)=@_;
@@ -215,7 +218,7 @@ sub ready {
                 $s->set_channel_mode($client,$channel_id,$channel_mode);
             }
             else{
-                $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$client->{channel}{$channel_id}{mode});
+                $s->send($client,$s->servername,"324",$client->{nick},$channel_id,'+'.$client->{channel}{$channel_id}{mode});
             }
         }
         else{
@@ -225,7 +228,7 @@ sub ready {
                 $s->set_user_mode($client,$mode);
             }
             else{
-                $s->send($client,fullname($client),"MODE",$client->{nick},$client->{mode});
+                $s->send($client,fullname($client),"MODE",$client->{nick},'+'.$client->{mode});
             }
         }
     });
@@ -252,7 +255,8 @@ sub ready {
         my ($s,$client,$msg)=@_;
         $s->each_channel(sub{
             my($s,$channel) = @_;
-            $s->send($client,$s->servername,"322",$client->{nick},$channel->{id},$channel->{count},$channel->{topic});
+            return if $channel->{mode} =~/s/;
+            $s->send($client,$s->servername,"322",$client->{nick},$channel->{name},$channel->{count},$channel->{topic});
         });
         $s->send($client,$s->servername,"323",$client->{nick},"End of LIST");
     });
@@ -327,6 +331,7 @@ sub set_channel_mode{
     $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$mode);
     $s->info("$channel_id 模式设置为: $client->{channel}{$channel_id}{mode}");
 }
+
 sub set_channel_topic{
     my $s = shift;
     my $client = shift;
@@ -395,25 +400,43 @@ sub part_channel{
 sub join_channel{
     my $s =shift;
     my $client = shift;
-    my $channel_id = shift;
-    $channel_id = "#".$channel_id if substr($channel_id,0,1) ne "#";
-    my $channel = $s->search_channel(id=>$channel_id);
-    if(defined $channel){
-        $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>$channel->{topic},ctime=>$channel->{ctime}};
-    }
-    else{
-        $client->{channel}{$channel_id} = {id=>$channel_id,mode=>"i",topic=>"欢迎来到频道 $channel_id",ctime=>time()};
-    }   
-    $s->send($client,fullname($client),"JOIN",$channel_id);
-    $s->send($client,$s->servername,"332",$client->{nick},$channel_id,$client->{channel}{$channel_id}{topic});
-    $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} grep {exists $_->{channel}{$channel_id}}  @{$s->client}));
-    $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-    $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime} || time());
+    my $channels = shift;
+    my %opt = @_;
+    for my $channel_id (split /,/,$channels){
+        $channel_id = "#".$channel_id if substr($channel_id,0,1) ne "#";
+        my $id = $opt{id} || $channel_id;
+        my $mode = $opt{mode} || "i";
+        my $channel = $s->search_channel(id=>$id);
+        if(defined $channel){
+            $client->{channel}{$channel_id} = {
+                name=>  $channel->{name},
+                id=>    $channel->{id},
+                mode=>  $channel->{mode},
+                topic=> $channel->{topic},
+                ctime=> $channel->{ctime}
+            };
+        }
+        else{
+            $client->{channel}{$channel_id} = {
+                name=>$channel_id,
+                id=>$id,
+                mode=>$mode,
+                topic=>"欢迎来到频道 $channel_id",
+                ctime=>time()
+            };
+        }   
+        $s->send($client,fullname($client),"JOIN",$channel_id);
+        $s->send($client,$s->servername,"332",$client->{nick},$channel_id,$client->{channel}{$channel_id}{topic});
+        $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} grep {exists $_->{channel}{$channel_id}}  @{$s->client}));
+        $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
+        $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime} || time());
 
-    for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
-        $s->send($_,fullname($client),"JOIN",$channel_id);
+        for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
+            $s->send($_,fullname($client),"JOIN",$channel_id);
+        }
+        $s->info("[$client->{nick}] 加入频道 $channel_id");
+        if(ref $opt{cb} eq "CODE"){$opt{cb}->($s,$client)}
     }
-    $s->info("[$client->{nick}] 加入频道 $channel_id");
 }
 sub add_client{
     my $s = shift;  
@@ -428,10 +451,12 @@ sub add_virtual_client {
     my %opt = @_;
     my $c = $s->search_client(id=>$opt{id});
     return $c if defined $c;
+    $opt{nick} =~s/\s+/_/g;
+    $opt{nick} = '未知昵称' if not $opt{nick};
     while(1){
         my $c = $s->search_client(nick=>$opt{nick});
         if(defined $c){
-            if($opt{nick}=~/\((\d+)\)$/){
+            if($c->{nick}=~/\((\d+)\)$/){
                 my $num = $1;$num++;
                 $opt{nick} = $opt{nick} . "($num)";
             }
@@ -445,9 +470,10 @@ sub add_virtual_client {
         id      => $opt{id},
         name    => $opt{name},
         user    => $opt{user},
-        host    => $opt{host} || "localhost",
-        port    => $opt{port} || "none",
+        host    => $opt{host} || "virtualhost",
+        port    => $opt{port} || "virtualport",
         nick    => $opt{nick},
+        ctime   => time(),
         virtual => 1,
         mode    => "i",
         realname => "",
@@ -488,10 +514,18 @@ sub each_channel {
                 $channel{$channel_id}{count}++;
             }
             else{
-                $channel{$channel_id} = {id=>$channel_id,topic=>$c->{channel}{$channel_id}{topic} ,count=>1};
+                $channel{$channel_id} = {
+                    id      =>$c->{channel}{$channel_id}{id},
+                    ctime   =>$c->{channel}{$channel_id}{ctime},
+                    topic   =>$c->{channel}{$channel_id}{topic} ,
+                    count   =>1,
+                    mode    =>$c->{channel}{$channel_id}{mode},
+                    name    =>$c->{channel}{$channel_id}{name},
+                };
             }
         }
     }
+
     for(values %channel){
         $callback->($s,$_);
     }
@@ -508,7 +542,14 @@ sub search_channel {
                 $channel{$channel_id}{count}++;
             }
             else{
-                $channel{$channel_id} = {id=>$channel_id,ctime=>$c->{channel}{$channel_id}{ctime},topic=>$c->{channel}{$channel_id}{topic} ,count=>1};
+                $channel{$channel_id} = {
+                    id      =>$c->{channel}{$channel_id}{id},
+                    ctime   =>$c->{channel}{$channel_id}{ctime},
+                    topic   =>$c->{channel}{$channel_id}{topic} ,
+                    count   =>1,
+                    mode    =>$c->{channel}{$channel_id}{mode},
+                    name    =>$c->{channel}{$channel_id}{name}
+                };
             }
         }
     }
