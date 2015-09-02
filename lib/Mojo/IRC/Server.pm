@@ -214,11 +214,13 @@ sub ready {
         if(substr($msg->{params}[0],0,1) eq "#" ){
             my $channel_id = $msg->{params}[0];
             my $channel_mode = $msg->{params}[1];
-            if(defined $channel_mode){
-                $s->set_channel_mode($client,$channel_id,$channel_mode);
+            if(defined $channel_mode and $channel_mode eq "b"){
+                #$s->set_channel_mode($client,$channel_id,$channel_mode);
+                $s->send($client,$s->servername,"368",$client->{nick},$channel_id,"End of channel ban list");
             }
             else{
                 $s->send($client,$s->servername,"324",$client->{nick},$channel_id,'+'.$client->{channel}{$channel_id}{mode});
+                $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime});
             }
         }
         else{
@@ -430,7 +432,7 @@ sub join_channel{
         $s->send($client,$s->servername,"332",$client->{nick},$channel_id,$client->{channel}{$channel_id}{topic});
         $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} grep {exists $_->{channel}{$channel_id}}  @{$s->client}));
         $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-        $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime} || time());
+        #$s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime} || time());
 
         for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
             $s->send($_,fullname($client),"JOIN",$channel_id);
