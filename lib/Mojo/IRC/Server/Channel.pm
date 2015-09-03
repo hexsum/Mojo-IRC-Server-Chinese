@@ -23,7 +23,7 @@ sub remove_user{
     for(my $i=0;$i<@{$s->user};$i++){
         if($uid eq $s->user->[$i]){
             splice @{$s->user},$i,1;
-            if(@{$s->user} == 0){
+            if(@{$s->user} == 0 and $s->mode !~/P/){
                 $s->{_server}->remove_channel($s);
             }
             return;

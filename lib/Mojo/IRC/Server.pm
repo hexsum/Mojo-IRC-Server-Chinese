@@ -81,19 +81,19 @@ sub new_user{
         my $msg = $s->parser->parse($line);
         $s->emit(user_msg=>$user,$msg);
         if($msg->{command} eq "PASS"){$user->emit(pass=>$msg)}
-        elsif($msg->{command} eq "NICK"){$user->emit(nick=>$msg)}
-        elsif($msg->{command} eq "USER"){$user->emit(user=>$msg)}
-        elsif($msg->{command} eq "JOIN"){$user->emit(join=>$msg)}
-        elsif($msg->{command} eq "PART"){$user->emit(part=>$msg)}
-        elsif($msg->{command} eq "PING"){$user->emit(ping=>$msg)}
-        elsif($msg->{command} eq "PONG"){$user->emit(pong=>$msg)}
-        elsif($msg->{command} eq "MODE"){$user->emit(mode=>$msg)}
-        elsif($msg->{command} eq "PRIVMSG"){$user->emit(privmsg=>$msg)}
-        elsif($msg->{command} eq "QUIT"){$user->emit(quit=>$msg)}
-        elsif($msg->{command} eq "WHO"){$user->emit(who=>$msg)}
-        elsif($msg->{command} eq "WHOIS"){$user->emit(who=>$msg)}
-        elsif($msg->{command} eq "LIST"){$user->emit(list=>$msg)}
-        elsif($msg->{command} eq "TOPIC"){$user->emit(topic=>$msg)}
+        elsif($msg->{command} eq "NICK"){$user->emit(nick=>$msg);$s->emit(nick=>$user,$msg);}
+        elsif($msg->{command} eq "USER"){$user->emit(user=>$msg);$s->emit(user=>$user,$msg);}
+        elsif($msg->{command} eq "JOIN"){$user->emit(join=>$msg);$s->emit(join=>$user,$msg);}
+        elsif($msg->{command} eq "PART"){$user->emit(part=>$msg);$s->emit(part=>$user,$msg);}
+        elsif($msg->{command} eq "PING"){$user->emit(ping=>$msg);$s->emit(ping=>$user,$msg);}
+        elsif($msg->{command} eq "PONG"){$user->emit(pong=>$msg);$s->emit(pong=>$user,$msg);}
+        elsif($msg->{command} eq "MODE"){$user->emit(mode=>$msg);$s->emit(mode=>$user,$msg);}
+        elsif($msg->{command} eq "PRIVMSG"){$user->emit(privmsg=>$msg);$s->emit(privmsg=>$user,$msg);}
+        elsif($msg->{command} eq "QUIT"){$user->emit(quit=>$msg);$s->emit(quit=>$user,$msg);}
+        elsif($msg->{command} eq "WHO"){$user->emit(who=>$msg);$s->emit(who=>$user,$msg);}
+        elsif($msg->{command} eq "WHOIS"){$user->emit(whois=>$msg);$s->emit(whois=>$user,$msg);}
+        elsif($msg->{command} eq "LIST"){$user->emit(list=>$msg);$s->emit(list=>$user,$msg);}
+        elsif($msg->{command} eq "TOPIC"){$user->emit(topic=>$msg);$s->emit(topic=>$user,$msg);}
     });
 
     $user->io->on(error=>sub{
@@ -127,17 +127,19 @@ sub new_user{
         #$user->send($user->serverident,"375",$user->nick,$user->servername,"- ".$user->servername." message of the day");
         #$user->send($user->serverident,"372",$user->nick,$user->servername,"- Welcome To Mojo IRC Server");
         #$user->send($user->serverident,"376",$user->nick,$user->servername,"End of MOTD command");
-        $user->send($user->serverident,"396",$user->nick,$user->host,"是您当前显示的主机名称");
+        $user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");
     });
     $user->on(join=>sub{my($user,$msg) = @_;
-        my $channel_name = $msg->{params}[0];
-        my $channel = $user->search_channel(name=>$channel_name);
-        if(defined $channel){
-            $user->join_channel($channel);
-        }
-        else{
-            $channel = $user->new_channel(name=>$channel_name,id=>lc($channel_name));
-            $user->join_channel($channel);
+        my $channels = $msg->{params}[0];
+        for my $channel_name (split /,/,$channels){
+            my $channel = $user->search_channel(name=>$channel_name);
+            if(defined $channel){
+                $user->join_channel($channel);
+            }
+            else{
+                $channel = $user->new_channel(name=>$channel_name,id=>lc($channel_name));
+                $user->join_channel($channel);
+            }
         }
     });
     $user->on(part=>sub{my($user,$msg) = @_;
@@ -171,7 +173,7 @@ sub new_user{
             my $u = $user->search_user(nick=>$nick);
             if(defined $u){
                 $u->send($user->ident,"PRIVMSG",$nick,$content);
-                $s->info({level=>"IRC私信消息",title=>"[".$user->nick.".]->[$nick] :"},$content);
+                $s->info({level=>"IRC私信消息",title=>"[".$user->nick."]->[$nick] :"},$content);
             }
             else{
                 $user->send($user->serverident,"401",$user->nick,$nick,"No such nick");
@@ -209,6 +211,7 @@ sub new_user{
     $user->on(whois=>sub{my($user,$msg) = @_;});
     $user->on(list=>sub{my($user,$msg) = @_;
         for my $channel ($user->{_server}->channels){
+            next if $channel->mode =~ /s/;
             $user->send($user->serverident,"322",$user->nick,$channel->name,$channel->count(),$channel->topic);
         }
         $user->send($user->serverident,"323",$user->nick,"End of LIST");
@@ -230,7 +233,13 @@ sub add_channel{
     my $s = shift;
     my $channel = shift;
     my $is_cover = shift;
-    my $c = $s->search_channel(id=>$channel->id);
+    my $channel_name = $channel->name;
+    $channel_name = "#" . $channel_name if substr($channel_name,0,1) ne "#";
+    $channel_name=~s/\s+|,|&//g;
+    $channel->name($channel_name);
+    my $c = $s->search_channel(name=>$channel->name);
+    return $c if defined $c;
+    $c = $s->search_channel(id=>$channel->id);
     if(defined $c){if($is_cover){$s->info("频道 " . $c->name. " 已更新");$c=$channel;};return $c;}
     else{push @{$s->channel},$channel;$s->info("频道 ".$channel->name. " 已创建");return $channel;}
 
@@ -239,9 +248,27 @@ sub add_user{
     my $s = shift;
     my $user = shift;
     my $is_cover = shift;
+    if($user->is_virtual){
+        my $nick = $user->nick;
+        $nick =~s/\s+|\@|!//g;$nick = '未知昵称' if not $nick;
+        $user->nick($nick);
+        while(1){
+            my $u = $s->search_user(nick=>$user->nick);
+            if(defined $u){
+                if($nick =~/\((\d+)\)$/){
+                    my $num = $1;$num++;$user->nick($nick . "($num)");
+                }
+                else{$user->nick($nick . "(1)")}
+                #$user->send($user->ident,"433",$user->nick,$nick,'昵称已经被使用') 
+            }
+            else{last};
+        }
+    }
     my $u = $s->search_user(id=>$user->id);
     if(defined $u){if($is_cover){$s->info("C[".$u->name. "]已更新");$u=$user;};return $u;}
-    else{push @{$s->user},$user;$s->info("C[".$user->name. "]已加入");return $user;}    
+    else{
+        push @{$s->user},$user;$s->info("C[".$user->name. "]已加入");return $user;
+    }    
 }
 sub remove_user{
     my $s = shift;
@@ -297,10 +324,10 @@ sub search_channel{
     my %p = @_;
     return if 0 == grep {defined $p{$_}} keys %p;
     if(wantarray){
-        return grep {my $c = $_;(first {$_ eq "name"?(lc($p{$_}) ne lc($c->$_)):($p{$_} ne $c->{$_})} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->channel};
+        return grep {my $c = $_;(first {$_ eq "name"?(lc($p{$_}) ne lc($c->$_)):($p{$_} ne $c->$_)} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->channel};
     }
     else{
-        return first {my $c = $_;(first {$_ eq "name"?(lc($p{$_}) ne lc($c->{$_})):($p{$_} ne $c->{$_})} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->channel};
+        return first {my $c = $_;(first {$_ eq "name"?(lc($p{$_}) ne lc($c->$_)):($p{$_} ne $c->$_)} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->channel};
     }
 
 }
@@ -331,8 +358,6 @@ sub ready {
             name    =>  join(":",($stream->handle->peerhost,$stream->handle->peerport)),
             io      =>  $stream,
         );
-        use DDP; p $user;
-        print $user->host,"\n";
         $user->host($s->clienthost) if defined $s->clienthost;
         
         $s->emit(new_user=>$user);

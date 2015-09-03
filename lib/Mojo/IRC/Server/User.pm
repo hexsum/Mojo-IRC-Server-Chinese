@@ -35,7 +35,7 @@ sub set_nick{
     if(defined $user and $user->id ne $s->id){
         if($user->is_virtual){
             $s->{_server}->remove_user($user);
-            $s->send(NICK => $nick);
+            $s->send($s->ident,NICK => $nick);
             $s->broadcast($s->ident,NICK => $nick);
             $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
             $s->nick($nick);
@@ -77,11 +77,11 @@ sub join_channel{
     return if not defined $channel;
     push @{$s->channel},$channel->id if not $s->is_join_channel($channel->id);
     $channel->add_user($s->id);
-    $s->broadcast($s->ident,"JOIN",$channel->id);
-    $s->send($s->serverident,"332",$s->nick,$channel->id,$channel->topic);
+    $s->broadcast($s->ident,"JOIN",$channel->name);
+    $s->send($s->serverident,"332",$s->nick,$channel->name,$channel->topic);
     $s->send($s->serverident,"353",$s->nick,'=',$channel->name,join " ",map {$_->nick} $channel->users);
-    $s->send($s->serverident,"366",$s->nick,$channel->id,"End of NAMES list");
-    #$s->send($s->serverident,"329",$s->nick,$channel->id,$channel->ctime);
+    $s->send($s->serverident,"366",$s->nick,$channel->name,"End of NAMES list");
+    #$s->send($s->serverident,"329",$s->nick,$channel->name,$channel->ctime);
     $s->info("[" . $s->nick . "] 加入频道 " . $channel->name);    
 }
 sub part_channel{
@@ -163,5 +163,10 @@ sub send{
     $s->io->write($msg);
     $s->last_speek_time(time());
     $s->debug("S[".$s->name."] $msg");
+}
+sub is_localhost{
+    my $s = shift;
+    return 0 if $s->is_virtual;
+    return 1 if $s->io->handle->peerhost eq "127.0.0.1";
 }
 1;
