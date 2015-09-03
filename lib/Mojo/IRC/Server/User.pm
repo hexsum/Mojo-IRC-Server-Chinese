@@ -19,7 +19,7 @@ sub is_virtual {
 }
 sub quit{
     my $s = shift;
-    my $quit_reason = shift;
+    my $quit_reason = shift || "";
     $s->broadcast($s->ident,"QUIT",$quit_reason);
     $s->info("[" . $s->nick . "] 已退出($quit_reason)");
     $s->{_server}->remove_user($s);
