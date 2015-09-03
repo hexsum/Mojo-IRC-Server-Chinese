@@ -1,13 +1,15 @@
 package Mojo::IRC::Server::User;
 use Mojo::IRC::Server::Base 'Mojo::IRC::Server::Object';
 use List::Util qw(first);
-has [qw(id name host port io)];
+has [qw(id name io)];
 has user    => '*';
 has nick    => '*';
 has mode    => 'i';
 has buffer  => '';
 has virtual => 0;
-has connect_time => sub{time()};
+has host => sub{$_[0]->virtual?"virtualhost":"hidden"}; 
+has port => sub{$_[0]->virtual?"virtualport":"hidden"}; 
+has ctime => sub{time()};
 has 'last_speek_time';
 has channel => sub{[]};
 has realname => 'unset';

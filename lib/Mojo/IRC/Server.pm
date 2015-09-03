@@ -19,7 +19,7 @@ has network => "Mojo IRC NetWork";
 has ioloop => sub { Mojo::IOLoop->singleton };
 has parser => sub { Parse::IRC->new };
 has servername => "mojo-irc-server";
-has clienthost => 'hidden',
+has clienthost => undef,
 has create_time => sub{POSIX::strftime( '%Y/%m/%d %H:%M:%S', localtime() )};
 has log_level => "info";
 has log_path => undef;
@@ -127,8 +127,7 @@ sub new_user{
         #$user->send($user->serverident,"375",$user->nick,$user->servername,"- ".$user->servername." message of the day");
         #$user->send($user->serverident,"372",$user->nick,$user->servername,"- Welcome To Mojo IRC Server");
         #$user->send($user->serverident,"376",$user->nick,$user->servername,"End of MOTD command");
-        #$user->send($user->serverident,"396",$user->nick,$user->clienthost,"是您当前显示的主机名称");
-        
+        $user->send($user->serverident,"396",$user->nick,$user->host,"是您当前显示的主机名称");
     });
     $user->on(join=>sub{my($user,$msg) = @_;
         my $channel_name = $msg->{params}[0];
@@ -330,10 +329,11 @@ sub ready {
         my $user = $s->new_user(
             id      =>  $id,
             name    =>  join(":",($stream->handle->peerhost,$stream->handle->peerport)),
-            host    =>  $stream->handle->peerhost,
-            port    =>  $stream->handle->peerport,
             io      =>  $stream,
         );
+        use DDP; p $user;
+        print $user->host,"\n";
+        $user->host($s->clienthost) if defined $s->clienthost;
         
         $s->emit(new_user=>$user);
     });
