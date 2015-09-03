@@ -1,6 +1,6 @@
 package Mojo::IRC::Server;
-$Mojo::IRC::Server::VERSION = "1.0.4";
 use strict;
+$Mojo::IRC::Server::VERSION = "1.0.5";
 use Encode;
 use Encode::Locale;
 use Carp;
@@ -9,8 +9,9 @@ use Mojo::IOLoop;
 use POSIX ();
 use List::Util qw(first);
 use Fcntl ':flock';
-use base qw(Mojo::Base Mojo::EventEmitter);
-sub has { Mojo::Base::attr(__PACKAGE__, @_) }
+use Mojo::IRC::Server::Base 'Mojo::EventEmitter';
+use Mojo::IRC::Server::User;
+use Mojo::IRC::Server::Channel;
 
 has host => "0.0.0.0";
 has port => 6667;
@@ -18,11 +19,13 @@ has network => "Mojo IRC NetWork";
 has ioloop => sub { Mojo::IOLoop->singleton };
 has parser => sub { Parse::IRC->new };
 has servername => "mojo-irc-server";
-has clienthost => undef,
+has clienthost => 'hidden',
 has create_time => sub{POSIX::strftime( '%Y/%m/%d %H:%M:%S', localtime() )};
-has client => sub {[]};
 has log_level => "info";
 has log_path => undef;
+
+has user => sub {[]};
+has channel => sub {[]};
 
 has log => sub{
     require Mojo::Log;
@@ -60,537 +63,248 @@ has log => sub{
     });
 };
 
-sub ready {
+sub new_user{
     my $s = shift;
-    $s->ioloop->server({host=>$s->host,port=>$s->port}=>sub{
-        my ($loop, $stream) = @_;
-        my $id = $stream->handle->sockhost . ":" . $stream->handle->sockport . ":" . $stream->handle->peerhost  . ":". $stream->handle->peerport;
-        my $client = {
-            id  =>  $id,
-            name=>  $stream->handle->peerhost  . ":". $stream->handle->peerport,
-            user=>  "",
-            host=>  $stream->handle->peerhost,
-            port=>  $stream->handle->peerport,
-            nick=>  "*",
-            mode=>  "i",
-            stream  =>$stream,
-            buffer  =>'',
-            virtual =>0,
-            channel =>{},
-            realname =>"",
-        };
-        $client->{stream}->timeout(0);
-        $s->emit(new_client=>$client);
+    my $user = $s->add_user(Mojo::IRC::Server::User->new(@_,_server=>$s));
+    return $user if $user->is_virtual;
+    $user->io->on(read=>sub{
+        my($stream,$bytes) = @_;
+        $bytes = $user->buffer . $bytes;
+        my $pos = rindex($bytes,"\r\n");
+        my $lines = substr($bytes,0,$pos);
+        my $remains = substr($bytes,$pos+2);
+        $user->buffer($remains);
+        $stream->emit(line=>$_) for split /\r\n/,$lines;
+    });
+    $user->io->on(line=>sub{
+        my($stream,$line)  = @_;
+        my $msg = $s->parser->parse($line);
+        $s->emit(user_msg=>$user,$msg);
+        if($msg->{command} eq "PASS"){$user->emit(pass=>$msg)}
+        elsif($msg->{command} eq "NICK"){$user->emit(nick=>$msg)}
+        elsif($msg->{command} eq "USER"){$user->emit(user=>$msg)}
+        elsif($msg->{command} eq "JOIN"){$user->emit(join=>$msg)}
+        elsif($msg->{command} eq "PART"){$user->emit(part=>$msg)}
+        elsif($msg->{command} eq "PING"){$user->emit(ping=>$msg)}
+        elsif($msg->{command} eq "PONG"){$user->emit(pong=>$msg)}
+        elsif($msg->{command} eq "MODE"){$user->emit(mode=>$msg)}
+        elsif($msg->{command} eq "PRIVMSG"){$user->emit(privmsg=>$msg)}
+        elsif($msg->{command} eq "QUIT"){$user->emit(quit=>$msg)}
+        elsif($msg->{command} eq "WHO"){$user->emit(who=>$msg)}
+        elsif($msg->{command} eq "WHOIS"){$user->emit(who=>$msg)}
+        elsif($msg->{command} eq "LIST"){$user->emit(list=>$msg)}
+        elsif($msg->{command} eq "TOPIC"){$user->emit(topic=>$msg)}
     });
 
-    $s->on(new_client=>sub{
-        my ($s,$client)=@_;
-        $s->debug("C[$client->{name}] 已连接");
-        $s->add_client($client); 
-        $client->{stream}->on(read=>sub{
-            my($stream,$bytes) = @_;
-            $bytes = $client->{buffer} . $bytes;
-            my $pos = rindex($bytes,"\r\n");
-            my $lines = substr($bytes,0,$pos);
-            my $remains = substr($bytes,$pos+2);
-            $client->{buffer} = $remains;
-            $stream->emit(line=>$_) for split /\r\n/,$lines;
-        });
-        $client->{stream}->on(line=>sub{
-            my($stream,$line)  = @_;
-            my $msg = $s->parser->parse($line);
-            $s->emit(client_msg=>$client,$msg);
-            if($msg->{command} eq "PASS"){$s->emit(pass=>$client,$msg)}
-            elsif($msg->{command} eq "NICK"){$s->emit(nick=>$client,$msg)}
-            elsif($msg->{command} eq "USER"){$s->emit(user=>$client,$msg)}
-            elsif($msg->{command} eq "JOIN"){$s->emit(join=>$client,$msg)}
-            elsif($msg->{command} eq "PART"){$s->emit(part=>$client,$msg)}
-            elsif($msg->{command} eq "PING"){$s->emit(ping=>$client,$msg)} 
-            elsif($msg->{command} eq "PONG"){$s->emit(pong=>$client,$msg)} 
-            elsif($msg->{command} eq "MODE"){$s->emit(mode=>$client,$msg)} 
-            elsif($msg->{command} eq "PRIVMSG"){$s->emit(privmsg=>$client,$msg)} 
-            elsif($msg->{command} eq "QUIT"){$s->emit(quit=>$client,$msg)} 
-            elsif($msg->{command} eq "WHO"){$s->emit(who=>$client,$msg)} 
-            elsif($msg->{command} eq "WHOIS"){$s->emit(who=>$client,$msg)} 
-            elsif($msg->{command} eq "LIST"){$s->emit(list=>$client,$msg)} 
-            elsif($msg->{command} eq "TOPIC"){$s->emit(topic=>$client,$msg)} 
-        });
-        $client->{stream}->on(error=>sub{
-            my ($stream, $err) = @_;
-            $s->emit(close_client=>$client);
-            $s->debug("C[$client->{name}] 连接错误: $err");
-        });
-        $client->{stream}->on(close=>sub{
-            my ($stream, $err) = @_;
-            $s->emit(close_client=>$client);
-        });
+    $user->io->on(error=>sub{
+        my ($stream, $err) = @_;
+        $s->emit(close_user=>$user);
+        $s->debug("C[" .$user->name."] 连接错误: $err");
     });
-    $s->on(client_msg=>sub{
-        my ($s,$client,$msg)=@_;
-        $s->debug("C[$client->{name}] $msg->{raw_line}");
+    $user->io->on(close=>sub{
+        my ($stream, $err) = @_;
+        $s->emit(close_user=>$user);
     });
-    $s->on(close_client=>sub{
-        my ($s,$client)=@_;
-        $s->del_client($client);
-        $s->debug("C[$client->{name}] 已断开");
-    });
-
-    $s->on(nick=>sub{
-        my ($s,$client,$msg)=@_;
-        my $nick = $msg->{params}[0];
-        $s->set_nick($client,$nick);
-    });
-    $s->on(user=>sub{
-        my ($s,$client,$msg)=@_;
-        if(defined $s->search_client(user=>$msg->{params}[0])){
-            $s->send($client,$s->servername,"446",$client->{nick},"该帐号已被使用");
-            return;
+    $user->on(nick=>sub{my($user,$msg) = @_;my $nick = $msg->{params}[0];$user->set_nick($nick)});
+    $user->on(user=>sub{my($user,$msg) = @_;
+        if(defined $user->search_user(user=>$msg->{params}[0])){
+            $user->send($user->serverident,"446",$user->nick,"该帐号已被使用");
+             return;
         }
-        $client->{user} = $msg->{params}[0];
-        #$client->{mode} = $msg->{params}[1]; 
-        $client->{realname} = $msg->{params}[3]; 
-        $s->send($client,$s->servername,"001",$client->{nick},"欢迎来到 Mojo IRC Network " . fullname($client));
-        #$s->send($client,$s->servername,"002",$client->{nick},"Your host is " . $s->servername . ", running version Mojo-IRC-Server-1.0");
-        #$s->send($client,$s->servername,"003",$client->{nick},"This server has been started " . $s->create_time);
-        #$s->send($client,$s->servername,"004",$client->{nick},$s->servername . " Mojo-IRC-Server-1.0 abBcCFioqrRswx abehiIklmMnoOPqQrRstvVz");
-        #$s->send($client,$s->servername,"005",$client->{nick},'RFC2812 IRCD=ngIRCd CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=#&+ CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10','are supported on this server');
-        #$s->send($client,$s->servername,"251",$client->{nick},$s->servername,"There are 0 users and 0 services on 1 servers");
-        #$s->send($client,$s->servername,"254",$client->{nick},$s->servername,0,"channels formed");
-        #$s->send($client,$s->servername,"255",$client->{nick},$s->servername,"I have 0 users, 0 services and 0 servers");
-        #$s->send($client,$s->servername,"265",$client->{nick},$s->servername,"is your displayed hostname now");
-        #$s->send($client,$s->servername,"266",$client->{nick},$s->servername,"is your displayed hostname now");
-        #$s->send($client,$s->servername,"250",$client->{nick},$s->servername,"is your displayed hostname now");
-        #$s->send($client,$s->servername,"375",$client->{nick},$s->servername,"- ".$s->servername." message of the day");
-        #$s->send($client,$s->servername,"372",$client->{nick},$s->servername,"- Welcome To Mojo IRC Server");
-        #$s->send($client,$s->servername,"376",$client->{nick},$s->servername,"End of MOTD command");
-        #$s->send($client,$s->servername,"396",$client->{nick},$s->servername,"是您当前显示的host名称");
-        #$client->{host} = $s->servername;
+        $user->user($msg->{params}[0]);
+        #$user->mode($msg->{params}[1]);
+        $user->realname($msg->{params}[3]);
+        $user->send($user->serverident,"001",$user->nick,"欢迎来到 Mojo IRC Network " . $user->ident);
+        #$user->send($user->serverident,"002",$user->nick,"Your host is " . $user->servername . ", running version Mojo-IRC-Server-${Mojo::IRC::Server::VERSION}");
+        #$user->send($user->serverident,"003",$user->nick,"This server has been started  " . $user->{_server}->create_time);
+        #$user->send($user->serverident,"004",$user->nick,$user->servername .  "Mojo-IRC-Server-${Mojo::IRC::Server::VERSION} abBcCFioqrRswx abehiIklmMnoOPqQrRstvVz");
+        #$user->send($user->serverident,"005",$user->nick,'RFC2812 IRCD=ngIRCd CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=#&+ CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10','are supported on this server");
+        #$user->send($user->serverident,"251",$user->nick,$user->servername,"There are 0 users and 0 services on 1 servers");
+        #$user->send($user->serverident,"254",$user->nick,$user->servername,0,"channels formed");
+        #$user->send($user->serverident,"255",$user->nick,$user->servername,"I have 0 users, 0 services and 0 servers");
+        #$user->send($user->serverident,"265",$user->nick,$user->servername,"");
+        #$user->send($user->serverident,"250",$user->nick,$user->servername,"");
+        #$user->send($user->serverident,"375",$user->nick,$user->servername,"- ".$user->servername." message of the day");
+        #$user->send($user->serverident,"372",$user->nick,$user->servername,"- Welcome To Mojo IRC Server");
+        #$user->send($user->serverident,"376",$user->nick,$user->servername,"End of MOTD command");
+        #$user->send($user->serverident,"396",$user->nick,$user->clienthost,"是您当前显示的主机名称");
+        
     });
-
-    $s->on(join=>sub{
-        my ($s,$client,$msg)=@_;
-        my $channel_id = $msg->{params}[0];
-        $s->join_channel($client,$channel_id);
+    $user->on(join=>sub{my($user,$msg) = @_;
+        my $channel_name = $msg->{params}[0];
+        my $channel = $user->search_channel(name=>$channel_name);
+        if(defined $channel){
+            $user->join_channel($channel);
+        }
+        else{
+            $channel = $user->new_channel(name=>$channel_name,id=>lc($channel_name));
+            $user->join_channel($channel);
+        }
     });
-
-    $s->on(part=>sub{
-        my ($s,$client,$msg)=@_;
-        my $channel_id = $msg->{params}[0];
+    $user->on(part=>sub{my($user,$msg) = @_;
+        my $channel_name = $msg->{params}[0];
         my $part_info = $msg->{params}[1];
-        $s->part_channel($client,$channel_id,$part_info);
+        my $channel = $user->search_channel(name=>$channel_name);
+        return if not defined $channel;
+        $user->part_channel($channel,$part_info);
     });
-
-    $s->on(quit=>sub{
-        my ($s,$client,$msg)=@_;
+    $user->on(ping=>sub{my($user,$msg) = @_;
+        my $servername = $msg->{params}[0];
+        $user->send($user->servername,"PONG",$user->servername,$servername);
+    });
+    $user->on(pong=>sub{});
+    $user->on(quit=>sub{my($user,$msg) = @_;
         my $quit_reason = $msg->{params}[0];
-        $s->quit($client,$quit_reason);
+        $user->quit($quit_reason);
     });
-    $s->on(privmsg=>sub{
-        my ($s,$client,$msg)=@_;
+    $user->on(privmsg=>sub{my($user,$msg) = @_;
         if(substr($msg->{params}[0],0,1) eq "#" ){
-            my $channel_id = $msg->{params}[0];
+            my $channel_name = $msg->{params}[0];
             my $content = $msg->{params}[1];
-            for (grep { exists $_->{channel}{$channel_id} } grep {$_->{id} ne $client->{id}} @{$s->client}){
-                $s->send($_,fullname($client),"PRIVMSG",$channel_id,$content);
-            }
-            $s->info({level=>"频道消息",title=>"$client->{nick}|$channel_id :"},$content);
+            my $channel = $user->search_channel(name=>$channel_name);
+            if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
+            $user->forward($user->ident,"PRIVMSG",$channel_name,$content);
+            $s->info({level=>"IRC频道消息",title=>$user->nick ."|" .$channel->name.":"},$content);
         }
         else{
             my $nick = $msg->{params}[0];
             my $content = $msg->{params}[1];
-            my $c = $s->search_client(nick=>$nick);
-            if(defined $c){
-                #$s->send($client,fullname($client),"PRIVMSG",$nick,$content); 
-                $s->send($c,fullname($client),"PRIVMSG",$nick,$content);
-                $s->info({level=>"私信消息",title=>"[$client->{nick}]->[$nick] :"},$content);
+            my $u = $user->search_user(nick=>$nick);
+            if(defined $u){
+                $u->send($user->ident,"PRIVMSG",$nick,$content);
+                $s->info({level=>"IRC私信消息",title=>"[".$user->nick.".]->[$nick] :"},$content);
             }
             else{
-                $s->send($client,$s->servername,"401",$client->{nick},$nick,"No such nick")
+                $user->send($user->serverident,"401",$user->nick,$nick,"No such nick");
             }
         }
     });
-    $s->on(mode=>sub{
-        my ($s,$client,$msg)=@_;
+    $user->on(mode=>sub{my($user,$msg) = @_;
         if(substr($msg->{params}[0],0,1) eq "#" ){
-            my $channel_id = $msg->{params}[0];
+            my $channel_name = $msg->{params}[0];
             my $channel_mode = $msg->{params}[1];
+            my $channel = $user->search_channel(name=>$channel_name);
+            if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
             if(defined $channel_mode and $channel_mode eq "b"){
-                #$s->set_channel_mode($client,$channel_id,$channel_mode);
-                $s->send($client,$s->servername,"368",$client->{nick},$channel_id,"End of channel ban list");
-            }
+                $user->send($user->serverident,"368",$user->nick,$channel_name,"End of channel ban list");
+            }   
             else{
-                $s->send($client,$s->servername,"324",$client->{nick},$channel_id,'+'.$client->{channel}{$channel_id}{mode});
-                $s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime});
+                $user->send($user->serverident,"324",$user->nick,$channel_name,'+'.$channel->mode);
+                $user->send($user->serverident,"329",$user->nick,$channel_name,$channel->ctime);
             }
         }
         else{
             my $nick = $msg->{params}[0];
             my $mode = $msg->{params}[1];
-            if(defined $mode){
-                $s->set_user_mode($client,$mode);
-            }
-            else{
-                $s->send($client,fullname($client),"MODE",$client->{nick},'+'.$client->{mode});
-            }
+            if(defined $mode){$user->set_mode($mode)}
+            else{$user->send($user->ident,"MODE",$user->nick,'+'.$user->mode)}
+        }    
+    });
+    $user->on(who=>sub{my($user,$msg) = @_;
+        my $channel_name = $msg->{params}[0];
+        my $channel = $user->search_channel(name=>$channel_name);
+        if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
+        $user->send($user->serverident,"352",$user->nick,$channel_name,$user->user,$user->host,$user->servername,$user->nick,"H","0 " . $user->realname);
+        $user->send($user->serverident,"315",$user->nick,$channel_name,"End of WHO list");
+    });
+    $user->on(whois=>sub{my($user,$msg) = @_;});
+    $user->on(list=>sub{my($user,$msg) = @_;
+        for my $channel ($user->{_server}->channels){
+            $user->send($user->serverident,"322",$user->nick,$channel->name,$channel->count(),$channel->topic);
         }
+        $user->send($user->serverident,"323",$user->nick,"End of LIST");
     });
-
-    $s->on(ping=>sub{
-        my ($s,$client,$msg)=@_;
-        my $servername = $msg->{params}[0];
-        $s->send($client,$s->servername,"PONG",,$s->servername,$servername);
-    });
-
-    $s->on(pong=>sub{
-        my ($s,$client,$msg)=@_;
-    });
-
-    $s->on(who=>sub{
-        my ($s,$client,$msg)=@_;
-        my $channel_id = $msg->{params}[0];
-        for(grep {exists $_->{channel}{$channel_id} } @{$s->client}){
-            $s->send($client,$s->servername,"352",$client->{nick},$channel_id,$_->{user},$_->{host},$s->servername,$_->{nick},"H","0 $_->{realname}"); 
-        }
-        $s->send($client,$s->servername,"315",$client->{nick},$channel_id,"End of WHO list");
-    });
-    $s->on(list=>sub{
-        my ($s,$client,$msg)=@_;
-        $s->each_channel(sub{
-            my($s,$channel) = @_;
-            return if $channel->{mode} =~/s/;
-            $s->send($client,$s->servername,"322",$client->{nick},$channel->{name},$channel->{count},$channel->{topic});
-        });
-        $s->send($client,$s->servername,"323",$client->{nick},"End of LIST");
-    });
-    $s->on(topic=>sub{
-        my ($s,$client,$msg)=@_;
-        my $channel_id = $msg->{params}[0]; 
+    $user->on(topic=>sub{my($user,$msg) = @_;
+        my $channel_name = $msg->{params}[0];
         my $topic = $msg->{params}[1];
-        $s->set_channel_topic($client,$channel_id,$topic);
+        my $channel = $user->search_channel(name=>$channel_name);
+        if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
+        $channel->set_topic($user,$topic);
     });
+    $user;
+}
+sub new_channel{
+    my $s = shift;
+    $s->add_channel(Mojo::IRC::Server::Channel->new(@_,_server=>$s));
+}
+sub add_channel{
+    my $s = shift;
+    my $channel = shift;
+    my $is_cover = shift;
+    my $c = $s->search_channel(id=>$channel->id);
+    if(defined $c){if($is_cover){$s->info("频道 " . $c->name. " 已更新");$c=$channel;};return $c;}
+    else{push @{$s->channel},$channel;$s->info("频道 ".$channel->name. " 已创建");return $channel;}
 
 }
-
-sub set_nick {
+sub add_user{
     my $s = shift;
-    my $client = shift;
-    my $nick = shift;
-    my $c = $s->search_client(nick=>$nick);
-    if(defined $c and $c->{id} ne $client->{id}){
-        $s->send($client,$s->servername,"433",$client->{nick},$nick,'昵称已经被使用');
-        $s->info("昵称 [$nick] 已经被占用");
-    }
-    elsif($client->{nick} ne "*"){
-        $s->change_nick($client,$nick);
-    }
-    else{
-        $s->change_nick($client,$nick);
-    }
+    my $user = shift;
+    my $is_cover = shift;
+    my $u = $s->search_user(id=>$user->id);
+    if(defined $u){if($is_cover){$s->info("C[".$u->name. "]已更新");$u=$user;};return $u;}
+    else{push @{$s->user},$user;$s->info("C[".$user->name. "]已加入");return $user;}    
 }
-
-sub set_user_mode{
+sub remove_user{
     my $s = shift;
-    my $client = shift;
-    my $mode = shift;
-    my %mode = map {$_=>1} split //,$client->{mode};
-    if(substr($mode,0,1) eq "+"){
-        $mode{$_}=1 for  split //,substr($mode,1,); 
-    }
-    elsif(substr($mode,0,1) eq "-"){
-        delete $mode{$_} for  split //,substr($mode,1,);
-    }
-    else{
-        %mode = ();
-        $mode{$_}=1 for  split //,$mode;
-    }
-    $client->{mode} = join "",keys %mode;
-    $s->send($client,fullname($client),"MODE",$client->{nick},$mode);
-    $s->info("[$client->{nick}] 模式设置为: $client->{mode}");
-}
-sub set_channel_mode{
-    my $s = shift;
-    my $client = shift;
-    my $channel_id = shift;
-    my $mode = shift;
-
-    $mode  = "+" . $mode if (substr($mode,0,1) ne '+' and substr($mode,0,1) ne '-');
-
-    for my $c(@{$s->client}){
-        if(exists $c->{channel}{$channel_id}){
-            my %mode = map {$_=>1} split //,$c->{channel}{$channel_id}{mode};
-            if(substr($mode,0,1) eq "+"){
-                $mode{$_}=1 for  split //,substr($mode,1,);
-            }
-            elsif(substr($mode,0,1) eq "-"){
-                delete $mode{$_} for  split //,substr($mode,1,);
+    my $user = shift;
+    for(my $i=0;$i<@{$s->user};$i++){
+        if($user->id eq $s->user->[$i]->id){
+            splice @{$s->user},$i,1;
+            if($user->is_virtual){
+                $s->info("c[".$user->name."] 已被移除");
             }
             else{
-                %mode = ();
-                $mode{$_}=1 for  split //,$mode;
-            }            
-            $c->{channel}{$channel_id}{mode} = join "",keys %mode;
-        }
-    }
-    $s->send($client,$s->servername,"324",$client->{nick},$channel_id,$mode);
-    $s->info("$channel_id 模式设置为: $client->{channel}{$channel_id}{mode}");
-}
-
-sub set_channel_topic{
-    my $s = shift;
-    my $client = shift;
-    my $channel_id = shift;
-    my $topic = shift;
-    for my $c (@{$s->client}) {
-        if(exists $c->{channel}{$channel_id}){
-            $c->{channel}{$channel_id}{topic} = $topic;
-        }
-    }
-    $s->send($client,fullname($client),"TOPIC",$channel_id,$topic);
-    for my $c (grep {$client->{id} ne $_->{id}} @{$s->client}){
-        $s->send($c,fullname($client),"TOPIC",$channel_id,$topic);
-    }
-    $s->info("$channel_id 主题设置为: $client->{channel}{$channel_id}{topic}");
-
-}
-sub fullname{
-    shift if ref $_[0] eq __PACKAGE__;
-    my $client = shift;
-    "$client->{nick}!$client->{user}\@$client->{host}"; 
-}
-
-sub quit{
-    my $s =shift;
-    my $client = shift;
-    my $quit_reason = shift;
-    for my $c (grep {$client->{id} ne $_->{id}} @{$s->client}){
-        for my $channel_id (keys %{$client->{channel}}){
-            if(exists $c->{channel}{$channel_id}){
-                $s->send($c,fullname($client),"QUIT",$quit_reason);
+                $s->info("C[".$user->name."] 已离开");
             }
+            last;
         }
     }
-    $s->info("[$client->{nick}] 已退出($quit_reason)");
-    $s->del_client($client);
 }
-sub change_nick{
+
+sub remove_channel{
     my $s = shift;
-    my $client = shift;
-    my $nick = shift;
-    $s->send($client,fullname($client),"NICK",$nick);
-    for my $c (grep {$_->{id} ne $client->{id}} @{$s->{client}}){
-        for my $channel_id (keys %{$client->{channel}}){
-            if(exists $c->{channel}{$channel_id}){
-                $s->send($c,fullname($client),"NICK",$nick);
-            }
+    my $channel = shift;
+    for(my $i=0;$i<@{$s->channel};$i++){
+        if($channel->id eq $s->channel->[$i]->id){
+            splice @{$s->channel},$i,1;
+            $s->info("频道 ".$channel->name." 已删除");
+            last;
         }
     }
-    $s->info("[$client->{nick}] 修改昵称为 [$nick]");
-    $client->{nick} = $nick;
 }
-
-sub part_channel{
-    my $s =shift;
-    my $client = shift;
-    my $channel_id = shift;
-    my $part_info = shift;
-    delete $client->{channel}{$channel_id};
-    $s->send($client,fullname($client),"PART",$channel_id,$part_info);
-    for (grep { exists $_->{channel}{$channel_id} } grep {$_->{id} ne $client->{id}} @{$s->{client}}){
-        $s->send($_,fullname($client),"PART",$channel_id,$part_info);
-    }
-    $s->info("[$client->{nick}] 离开频道 $channel_id");
-}
-sub join_channel{
-    my $s =shift;
-    my $client = shift;
-    my $channels = shift;
-    my %opt = @_;
-    for my $channel_id (split /,/,$channels){
-        $channel_id = "#".$channel_id if substr($channel_id,0,1) ne "#";
-        my $id = $opt{id} || $channel_id;
-        my $mode = $opt{mode} || "i";
-        my $channel = $s->search_channel(id=>$id);
-        if(defined $channel){
-            $client->{channel}{$channel_id} = {
-                name=>  $channel->{name},
-                id=>    $channel->{id},
-                mode=>  $channel->{mode},
-                topic=> $channel->{topic},
-                ctime=> $channel->{ctime}
-            };
-        }
-        else{
-            $client->{channel}{$channel_id} = {
-                name=>$channel_id,
-                id=>$id,
-                mode=>$mode,
-                topic=>"欢迎来到频道 $channel_id",
-                ctime=>time()
-            };
-        }   
-        $s->send($client,fullname($client),"JOIN",$channel_id);
-        $s->send($client,$s->servername,"332",$client->{nick},$channel_id,$client->{channel}{$channel_id}{topic});
-        $s->send($client,$s->servername,"353",$client->{nick},"=",$channel_id,join(" ",map {$_->{nick}} grep {exists $_->{channel}{$channel_id}}  @{$s->client}));
-        $s->send($client,$s->servername,"366",$client->{nick},$channel_id,"End of NAMES list");
-        #$s->send($client,$s->servername,"329",$client->{nick},$channel_id,$client->{channel}{$channel_id}{ctime} || time());
-
-        for( grep {exists $_->{channel}{$channel_id}} grep {$_->{id} ne $client->{id}} @{$s->client}){
-            $s->send($_,fullname($client),"JOIN",$channel_id);
-        }
-        $s->info("[$client->{nick}] 加入频道 $channel_id");
-        if(ref $opt{cb} eq "CODE"){$opt{cb}->($s,$client)}
-    }
-}
-sub add_client{
-    my $s = shift;  
-    my $client = shift;
-    my $c = $s->search_client(id=>$client->{id});
-    if(defined $c){$c = $client}
-    else{push @{$s->client},$client;}
-}
-
-sub add_virtual_client {
+sub users {
     my $s = shift;
-    my %opt = @_;
-    my $c = $s->search_client(id=>$opt{id});
-    return $c if defined $c;
-    $opt{nick} =~s/\s+/_/g;
-    $opt{nick} = '未知昵称' if not $opt{nick};
-    while(1){
-        my $c = $s->search_client(nick=>$opt{nick});
-        if(defined $c){
-            if($c->{nick}=~/\((\d+)\)$/){
-                my $num = $1;$num++;
-                $opt{nick} = $opt{nick} . "($num)";
-            }
-            else{
-                $opt{nick} = $opt{nick} . "(1)";
-            }   
-        }
-        else{last}
-    }
-    my $virtual_client = {
-        id      => $opt{id},
-        name    => $opt{name},
-        user    => $opt{user},
-        host    => $opt{host} || "virtualhost",
-        port    => $opt{port} || "virtualport",
-        nick    => $opt{nick},
-        ctime   => time(),
-        virtual => 1,
-        mode    => "i",
-        realname => "",
-    };
-    $s->add_client($virtual_client);
-    return $virtual_client;
+    return @{$s->user};
 }
-sub del_client{
+sub channels{
     my $s = shift;
-    my $client = shift;
-    for(my $i=0;$i<@{$s->client};$i++){
-        if($client->{id} eq $s->client->[$i]->{id}){
-            splice @{$s->client},$i,1;
-            return;
-        }
-    }
+    return @{$s->channel};
 }
 
-sub search_client {
+sub search_user{
     my $s = shift;
     my %p = @_;
     return if 0 == grep {defined $p{$_}} keys %p;
     if(wantarray){
-        return grep {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->client};
+        return grep {my $c = $_;(first {$p{$_} ne $c->$_} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->user};
     }
     else{
-        return first {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->client};
+        return first {my $c = $_;(first {$p{$_} ne $c->$_} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->user};
     }
+
 }
-
-sub each_channel {
-    my $s = shift;
-    my $callback = shift;
-    my %channel;
-    for my $c (@{$s->client}){
-        for my $channel_id (keys %{$c->{channel}}){
-            if(exists $channel{$channel_id}){
-                $channel{$channel_id}{count}++;
-            }
-            else{
-                $channel{$channel_id} = {
-                    id      =>$c->{channel}{$channel_id}{id},
-                    ctime   =>$c->{channel}{$channel_id}{ctime},
-                    topic   =>$c->{channel}{$channel_id}{topic} ,
-                    count   =>1,
-                    mode    =>$c->{channel}{$channel_id}{mode},
-                    name    =>$c->{channel}{$channel_id}{name},
-                };
-            }
-        }
-    }
-
-    for(values %channel){
-        $callback->($s,$_);
-    }
-}
-
-sub search_channel {
+sub search_channel{
     my $s = shift;
     my %p = @_;
     return if 0 == grep {defined $p{$_}} keys %p;
-    my %channel;
-    for my $c (@{$s->client}){
-        for my $channel_id (keys %{$c->{channel}}){
-            if(exists $channel{$channel_id}){
-                $channel{$channel_id}{count}++;
-            }
-            else{
-                $channel{$channel_id} = {
-                    id      =>$c->{channel}{$channel_id}{id},
-                    ctime   =>$c->{channel}{$channel_id}{ctime},
-                    topic   =>$c->{channel}{$channel_id}{topic} ,
-                    count   =>1,
-                    mode    =>$c->{channel}{$channel_id}{mode},
-                    name    =>$c->{channel}{$channel_id}{name}
-                };
-            }
-        }
-    }
     if(wantarray){
-        return grep {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} values %channel;
+        return grep {my $c = $_;(first {$_ eq "name"?(lc($p{$_}) ne lc($c->$_)):($p{$_} ne $c->{$_})} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->channel};
     }
     else{
-        return first {my $c = $_;(first {$p{$_} ne $c->{$_}} grep {defined $p{$_}} keys %p) ? 0 : 1;} values %channel;
-    } 
+        return first {my $c = $_;(first {$_ eq "name"?(lc($p{$_}) ne lc($c->{$_})):($p{$_} ne $c->{$_})} grep {defined $p{$_}} keys %p) ? 0 : 1;} @{$s->channel};
+    }
 
 }
-
-sub send {
-    my $s = shift;
-    my $client = shift;
-    return if $client->{virtual} ;
-    my($prefix,$command,@params)=@_;
-    my $msg = "";
-    #$msg .= defined $prefix ? ":$prefix " : ":" . $s->servername . " ";
-    $msg .= defined $prefix ? ":$prefix " : "";
-    $msg .= "$command";
-    my $trail;
-    #if ( @params >= 2 ) {
-        $trail = pop @params;
-    #}
-    map { $msg .= " $_" } @params;
-    $msg .= defined $trail ? " :$trail" : "";
-    $msg .= "\r\n";
-    $client->{stream}->write($msg);
-    $s->debug("S[$client->{name}] $msg");
-}
-sub run{
-    my $s = shift;
-    $s->ready();
-    $s->ioloop->start unless $s->ioloop->is_running;
-} 
-
-
 sub timer{
     my $s = shift;
     $s->ioloop->timer(@_);
@@ -599,7 +313,52 @@ sub interval{
     my $s = shift;
     $s->ioloop->recurring(@_);
 }
+sub ident {
+    return $_[0]->servername;
+}
+sub ready {
+    my $s = shift;
+    $s->ioloop->server({host=>$s->host,port=>$s->port}=>sub{
+        my ($loop, $stream) = @_;
+        $stream->timeout(0);
+        my $id = join ":",(
+            $stream->handle->sockhost,
+            $stream->handle->sockport,
+            $stream->handle->peerhost,
+            $stream->handle->peerport
+        );
+        my $user = $s->new_user(
+            id      =>  $id,
+            name    =>  join(":",($stream->handle->peerhost,$stream->handle->peerport)),
+            host    =>  $stream->handle->peerhost,
+            port    =>  $stream->handle->peerport,
+            io      =>  $stream,
+        );
+        
+        $s->emit(new_user=>$user);
+    });
 
+    $s->on(new_user=>sub{
+        my ($s,$user)=@_;
+        $s->debug("C[".$user->name. "]已连接");
+    });
+
+    $s->on(user_msg=>sub{
+        my ($s,$user,$msg)=@_;
+        $s->debug("C[".$user->name."] $msg->{raw_line}");
+    });
+
+    $s->on(close_user=>sub{
+        my ($s,$user,$msg)=@_;
+        $s->remove_user($user);
+    });
+
+}
+sub run{
+    my $s = shift;
+    $s->ready();
+    $s->ioloop->start unless $s->ioloop->is_running;
+} 
 sub die{
     my $s = shift; 
     local $SIG{__DIE__} = sub{$s->log->fatal(@_);exit -1};
@@ -630,4 +389,6 @@ sub debug{
     $s->log->debug(@_);
     $s;
 }
+
+
 1;
