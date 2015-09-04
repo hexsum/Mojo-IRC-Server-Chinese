@@ -163,7 +163,7 @@ sub new_user{
             my $channel_name = $msg->{params}[0];
             my $content = $msg->{params}[1];
             my $channel = $user->search_channel(name=>$channel_name);
-            if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
+            if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
             $user->forward($user->ident,"PRIVMSG",$channel_name,$content);
             $s->info({level=>"IRC频道消息",title=>$user->nick ."|" .$channel->name.":"},$content);
         }
@@ -185,7 +185,7 @@ sub new_user{
             my $channel_name = $msg->{params}[0];
             my $channel_mode = $msg->{params}[1];
             my $channel = $user->search_channel(name=>$channel_name);
-            if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
+            if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
             if(defined $channel_mode and $channel_mode eq "b"){
                 $user->send($user->serverident,"368",$user->nick,$channel_name,"End of channel ban list");
             }   
@@ -204,7 +204,7 @@ sub new_user{
     $user->on(who=>sub{my($user,$msg) = @_;
         my $channel_name = $msg->{params}[0];
         my $channel = $user->search_channel(name=>$channel_name);
-        if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
+        if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
         $user->send($user->serverident,"352",$user->nick,$channel_name,$user->user,$user->host,$user->servername,$user->nick,"H","0 " . $user->realname);
         $user->send($user->serverident,"315",$user->nick,$channel_name,"End of WHO list");
     });
@@ -235,7 +235,7 @@ sub add_channel{
     my $is_cover = shift;
     my $channel_name = $channel->name;
     $channel_name = "#" . $channel_name if substr($channel_name,0,1) ne "#";
-    $channel_name=~s/\s+|,|&//g;
+    $channel_name=~s/\s|,|&//g;
     $channel->name($channel_name);
     my $c = $s->search_channel(name=>$channel->name);
     return $c if defined $c;
@@ -250,7 +250,7 @@ sub add_user{
     my $is_cover = shift;
     if($user->is_virtual){
         my $nick = $user->nick;
-        $nick =~s/\s+|\@|!//g;$nick = '未知昵称' if not $nick;
+        $nick =~s/\s|\@|!//g;$nick = '未知昵称' if not $nick;
         $user->nick($nick);
         while(1){
             my $u = $s->search_user(nick=>$user->nick);
@@ -275,6 +275,7 @@ sub remove_user{
     my $user = shift;
     for(my $i=0;$i<@{$s->user};$i++){
         if($user->id eq $s->user->[$i]->id){
+            $_->remove_user($s->user->[$i]->id) for $s->user->[$i]->channels;
             splice @{$s->user},$i,1;
             if($user->is_virtual){
                 $s->info("c[".$user->name."] 已被移除");
