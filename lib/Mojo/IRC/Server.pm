@@ -99,11 +99,13 @@ sub new_user{
     $user->io->on(error=>sub{
         my ($stream, $err) = @_;
         $s->emit(close_user=>$user);
+        $user->emit("close");
         $s->debug("C[" .$user->name."] 连接错误: $err");
     });
     $user->io->on(close=>sub{
         my ($stream, $err) = @_;
         $s->emit(close_user=>$user);
+        $user->emit("close");
     });
     $user->on(nick=>sub{my($user,$msg) = @_;my $nick = $msg->{params}[0];$user->set_nick($nick)});
     $user->on(user=>sub{my($user,$msg) = @_;

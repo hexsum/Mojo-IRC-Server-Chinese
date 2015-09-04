@@ -35,6 +35,7 @@ sub set_nick{
     if(defined $user and $user->id ne $s->id){
         if($user->is_virtual){
             $s->{_server}->remove_user($user);
+            $s->on(close=>sub{$s->{_server}->add_user($user)});
             $s->send($s->ident,NICK => $nick);
             $s->broadcast($s->ident,NICK => $nick);
             $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
