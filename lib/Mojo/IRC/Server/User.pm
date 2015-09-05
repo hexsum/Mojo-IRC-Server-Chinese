@@ -35,7 +35,7 @@ sub set_nick{
     if(defined $user and $user->id ne $s->id){
         if($user->is_virtual){
             $s->{_server}->remove_user($user);
-            $s->on(close=>sub{$s->{_server}->add_user($user)});
+            $s->once(close=>sub{$s->{_server}->add_user($user)});
             $s->send($s->ident,NICK => $nick);
             $s->broadcast($s->ident,NICK => $nick);
             $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
@@ -83,7 +83,7 @@ sub join_channel{
     $s->send($s->serverident,"353",$s->nick,'=',$channel->name,join " ",map {$_->nick} $channel->users);
     $s->send($s->serverident,"366",$s->nick,$channel->name,"End of NAMES list");
     #$s->send($s->serverident,"329",$s->nick,$channel->name,$channel->ctime);
-    $s->info("[" . $s->nick . "] 加入频道 " . $channel->name);    
+    $s->info("[" . $s->name . "] 加入频道 " . $channel->name);    
 }
 sub part_channel{
     my $s = shift;
