@@ -90,7 +90,7 @@ sub part_channel{
     my $channel = ref($_[0]) eq "Mojo::IRC::Server::Channel"?$_[0]:$s->search_channel(id=>$_[0]);
     my $part_info = $_[1];
     return if not defined $channel;
-    $s->broadcast($s->ident,"PART",$channel->id,$part_info);
+    $s->broadcast($s->ident,"PART",$channel->name,$part_info);
     for(my $i=0;$i<@{$s->channel};$i++){
         if($channel->id eq $s->channel->[$i]){
             splice @{$s->channel},$i,1;
