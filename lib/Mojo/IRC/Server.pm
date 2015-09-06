@@ -15,6 +15,7 @@ use Mojo::IRC::Server::Channel;
 
 has host => "0.0.0.0";
 has port => 6667;
+has listen => undef;
 has network => "Mojo IRC NetWork";
 has ioloop => sub { Mojo::IOLoop->singleton };
 has parser => sub { Parse::IRC->new };
@@ -168,7 +169,7 @@ sub new_user{
             my $content = $msg->{params}[1];
             my $channel = $user->search_channel(name=>$channel_name);
             if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
-            $user->forward($user->ident,"PRIVMSG",$channel_name,$content);
+            $channel->forward($user,$user->ident,"PRIVMSG",$channel_name,$content);
             $s->info({level=>"IRC频道消息",title=>$user->nick ."|" .$channel->name.":"},$content);
         }
         else{
@@ -349,25 +350,33 @@ sub ident {
 }
 sub ready {
     my $s = shift;
-    $s->ioloop->server({host=>$s->host,port=>$s->port}=>sub{
-        my ($loop, $stream) = @_;
-        $stream->timeout(0);
-        my $id = join ":",(
-            $stream->handle->sockhost,
-            $stream->handle->sockport,
-            $stream->handle->peerhost,
-            $stream->handle->peerport
-        );
-        my $user = $s->new_user(
-            id      =>  $id,
-            name    =>  join(":",($stream->handle->peerhost,$stream->handle->peerport)),
-            io      =>  $stream,
-        );
-        $user->host($s->clienthost) if defined $s->clienthost;
-        
-        $s->emit(new_user=>$user);
-    });
-
+    my @listen = ();
+    if(defined $s->listen and ref $s->listen eq "ARRAY"){
+        push @listen,{host=>$_->{host} || "0.0.0.0",port=>$_->{port}||"6667"} for @{$s->listen} ;
+    }
+    else{
+        @listen = ({host=>$s->host,port=>$s->port});
+    }
+    for my $listen (@listen){
+        $s->ioloop->server({host=>$listen->{host},port=>$listen->{port}}=>sub{
+            my ($loop, $stream) = @_;
+            $stream->timeout(0);
+            my $id = join ":",(
+                $stream->handle->sockhost,
+                $stream->handle->sockport,
+                $stream->handle->peerhost,
+                $stream->handle->peerport
+            );
+            my $user = $s->new_user(
+                id      =>  $id,
+                name    =>  join(":",($stream->handle->peerhost,$stream->handle->peerport)),
+                io      =>  $stream,
+            );
+            $user->host($s->clienthost) if defined $s->clienthost;
+            $s->emit(new_user=>$user);
+        });
+    }
+    
     $s->on(new_user=>sub{
         my ($s,$user)=@_;
         $s->debug("C[".$user->name. "]已连接");
@@ -382,7 +391,6 @@ sub ready {
         my ($s,$user,$msg)=@_;
         $s->remove_user($user);
     });
-
 }
 sub run{
     my $s = shift;

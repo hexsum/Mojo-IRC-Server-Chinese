@@ -80,4 +80,20 @@ sub users{
     return @users;
 }
 
+sub broadcast {
+    my $s = shift;
+    for my $user ($s->users){
+        $user->send(@_);
+    }
+}
+
+sub forward {
+    my $s = shift;
+    my $except_user = shift;
+    for my $user ($s->users){
+        next if $user->id eq $except_user->id;
+        $user->send(@_);
+    }
+}
+
 1;

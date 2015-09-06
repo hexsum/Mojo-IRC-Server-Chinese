@@ -40,6 +40,7 @@ sub set_nick{
             $s->broadcast($s->ident,NICK => $nick);
             $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
             $s->nick($nick);
+            $s->name($nick);
         }
         else{
             $s->send($s->serverident,"433",$user->nick,$nick,'昵称已经被使用');
@@ -51,6 +52,7 @@ sub set_nick{
         $s->broadcast($s->ident,NICK => $nick);
         $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
         $s->nick($nick);
+        $s->name($nick);
     }
 }
 sub set_mode{
@@ -78,7 +80,7 @@ sub join_channel{
     return if not defined $channel;
     push @{$s->channel},$channel->id if not $s->is_join_channel($channel->id);
     $channel->add_user($s->id);
-    $s->broadcast($s->ident,"JOIN",$channel->name);
+    $channel->broadcast($s->ident,"JOIN",$channel->name);
     $s->send($s->serverident,"332",$s->nick,$channel->name,$channel->topic);
     $s->send($s->serverident,"353",$s->nick,'=',$channel->name,join " ",map {$_->nick} $channel->users);
     $s->send($s->serverident,"366",$s->nick,$channel->name,"End of NAMES list");
@@ -90,7 +92,7 @@ sub part_channel{
     my $channel = ref($_[0]) eq "Mojo::IRC::Server::Channel"?$_[0]:$s->search_channel(id=>$_[0]);
     my $part_info = $_[1];
     return if not defined $channel;
-    $s->broadcast($s->ident,"PART",$channel->name,$part_info);
+    $channel->broadcast($s->ident,"PART",$channel->name,$part_info);
     for(my $i=0;$i<@{$s->channel};$i++){
         if($channel->id eq $s->channel->[$i]){
             splice @{$s->channel},$i,1;
@@ -120,6 +122,7 @@ sub forward{
         }
     }
 }
+
 sub broadcast{
     my $s = shift; 
     $s->send(@_);
