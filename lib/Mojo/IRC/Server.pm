@@ -111,7 +111,9 @@ sub new_user{
     $user->on(user=>sub{my($user,$msg) = @_;
         if(defined $user->search_user(user=>$msg->{params}[0])){
             $user->send($user->serverident,"446",$user->nick,"该帐号已被使用");
-             return;
+            $user->io->close_gracefully();
+            $user->{_server}->remove_user($user);
+            return;
         }
         $user->user($msg->{params}[0]);
         #$user->mode($msg->{params}[1]);
