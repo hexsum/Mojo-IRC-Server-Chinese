@@ -207,11 +207,32 @@ sub new_user{
         }    
     });
     $user->on(who=>sub{my($user,$msg) = @_;
-        my $channel_name = $msg->{params}[0];
-        my $channel = $user->search_channel(name=>$channel_name);
-        if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
-        $user->send($user->serverident,"352",$user->nick,$channel_name,$user->user,$user->host,$user->servername,$user->nick,"H","0 " . $user->realname);
-        $user->send($user->serverident,"315",$user->nick,$channel_name,"End of WHO list");
+        if(substr($msg->{params}[0],0,1) eq "#" ){
+            my $channel_name = $msg->{params}[0];
+            my $channel = $user->search_channel(name=>$channel_name);
+            if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
+            for($channel->users){
+                $user->send($user->serverident,"352",$user->nick,$channel_name,$_->user,$_->host,$_->servername,$_->nick,"H","0 " . $_->realname);
+            }
+            $user->send($user->serverident,"315",$user->nick,$channel_name,"End of WHO list");
+        }
+        else{
+            my $nick = $msg->{params}[0];
+            my $u = $user->search_user(nick=>$nick);
+            if(defined $u){
+                my $channel_name = "*";
+                if($u->is_join_channel()){
+                    my $last_channel = ($u->channels)[-1];
+                    $channel_name = $last_channel->name;
+                }
+                $user->send($user->serverident,"352",$user->nick,$channel_name,$u->user,$u->host,$u->servername,$u->nick,"H","0 " . $u->realname);
+                $user->send($user->serverident,"315",$user->nick,$nick,"End of WHO list");
+            }
+            else{
+                $user->send($user->serverident,"401",$user->nick,$nick,"No such nick");
+            }
+            
+        }
     });
     $user->on(whois=>sub{my($user,$msg) = @_;});
     $user->on(list=>sub{my($user,$msg) = @_;

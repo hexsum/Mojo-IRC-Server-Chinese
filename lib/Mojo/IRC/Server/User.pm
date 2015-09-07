@@ -76,14 +76,17 @@ sub join_channel{
     my $channel;
     $channel = ref($_[0]) eq "Mojo::IRC::Server::Channel"?$_[0]:$s->search_channel(id=>$_[0]);
     return if not defined $channel;
-    push @{$s->channel},$channel->id if not $s->is_join_channel($channel->id);
-    $channel->add_user($s->id);
-    $channel->broadcast($s->ident,"JOIN",$channel->name);
+    if(not $s->is_join_channel($channel->id)){
+        push @{$s->channel},$channel->id;
+        $channel->add_user($s->id);
+        $channel->broadcast($s->ident,"JOIN",$channel->name);
+    }
+    else{$s->send($s->ident,"JOIN",$channel->name);} 
     $s->send($s->serverident,"332",$s->nick,$channel->name,$channel->topic);
     $s->send($s->serverident,"353",$s->nick,'=',$channel->name,join " ",map {$_->nick} $channel->users);
     $s->send($s->serverident,"366",$s->nick,$channel->name,"End of NAMES list");
     #$s->send($s->serverident,"329",$s->nick,$channel->name,$channel->ctime);
-    $s->info("[" . $s->name . "] 加入频道 " . $channel->name);    
+    $s->info("[" . $s->name . "] 加入频道 " . $channel->name);
 }
 sub part_channel{
     my $s = shift;
