@@ -257,6 +257,8 @@ sub add_user{
         my $nick = $user->nick;
         $nick =~s/\s|\@|!//g;$nick = '未知昵称' if not $nick;
         $user->nick($nick);
+        my $u = $s->search_user(nick=>$user->nick,virtual=>1,id=>$user->id);
+        return $u if defined $u;
         while(1){
             my $u = $s->search_user(nick=>$user->nick);
             if(defined $u){
