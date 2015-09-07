@@ -6,6 +6,7 @@ has id      => sub {lc $_[0]->name};
 has topic   => sub {"欢迎来到 " . $_[0]->name};
 has ctime   => sub {time()};
 has mode    => 'i';
+has pass    => undef;
 has user    => sub {[]};
 
 sub count {
@@ -46,7 +47,7 @@ sub set_topic{
     my $user = shift;
     my $topic = shift;
     $s->topic($topic);
-    $user->broadcast($s->ident,"TOPIC",$s->name,$topic); 
+    $s->broadcast($user->ident,"TOPIC",$s->name,$topic); 
     $s->info($s->name . " 主题设置为: " . $s->topic);
 }
 sub set_mode{
@@ -66,7 +67,7 @@ sub set_mode{
         $mode{$_}=1 for  split //,$mode;
     }
     $s->mode(join "",keys %mode);
-    $user->broadcast($s->servername,"324",$user->nick,$s->name,$mode); 
+    $s->broadcast($user->ident,"MODE",$s->name,$mode); 
     $s->info("[" . $s->name . "] 模式设置为: " . $s->mode);
 }
 

@@ -3,6 +3,7 @@ use Mojo::IRC::Server::Base 'Mojo::IRC::Server::Object';
 use List::Util qw(first);
 has [qw(id name io)];
 has user    => '*';
+has pass    => undef;
 has nick    => '*';
 has mode    => 'i';
 has buffer  => '';

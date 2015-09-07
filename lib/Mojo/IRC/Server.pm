@@ -95,6 +95,7 @@ sub new_user{
         elsif($msg->{command} eq "WHOIS"){$user->emit(whois=>$msg);$s->emit(whois=>$user,$msg);}
         elsif($msg->{command} eq "LIST"){$user->emit(list=>$msg);$s->emit(list=>$user,$msg);}
         elsif($msg->{command} eq "TOPIC"){$user->emit(topic=>$msg);$s->emit(topic=>$user,$msg);}
+        else{$user->send($user->serverident,"421",$user->nick,$msg->{command},"Unknown command");}
     });
 
     $user->io->on(error=>sub{
@@ -108,6 +109,7 @@ sub new_user{
         $s->emit(close_user=>$user);
         $user->emit("close");
     });
+    $user->on(pass=>sub{my($user,$msg) = @_;my $pass = $msg->{params}[0]; $user->pass($pass);});
     $user->on(nick=>sub{my($user,$msg) = @_;my $nick = $msg->{params}[0];$user->set_nick($nick)});
     $user->on(user=>sub{my($user,$msg) = @_;
         if(defined $user->search_user(user=>$msg->{params}[0])){
@@ -193,7 +195,10 @@ sub new_user{
             if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
             if(defined $channel_mode and $channel_mode eq "b"){
                 $user->send($user->serverident,"368",$user->nick,$channel_name,"End of channel ban list");
-            }   
+            }
+            elsif(defined $channel_mode and $channel_mode ne "b") {
+                $channel->set_mode($user,$channel_mode);
+            }
             else{
                 $user->send($user->serverident,"324",$user->nick,$channel_name,'+'.$channel->mode);
                 $user->send($user->serverident,"329",$user->nick,$channel_name,$channel->ctime);
@@ -203,7 +208,7 @@ sub new_user{
             my $nick = $msg->{params}[0];
             my $mode = $msg->{params}[1];
             if(defined $mode){$user->set_mode($mode)}
-            else{$user->send($user->ident,"MODE",$user->nick,'+'.$user->mode)}
+            else{$user->send($user->serverident,"221",$user->nick,'+'.$user->mode)}
         }    
     });
     $user->on(who=>sub{my($user,$msg) = @_;
@@ -244,10 +249,15 @@ sub new_user{
     });
     $user->on(topic=>sub{my($user,$msg) = @_;
         my $channel_name = $msg->{params}[0];
-        my $topic = $msg->{params}[1];
         my $channel = $user->search_channel(name=>$channel_name);
-        if(not defined $channel){$user->send($user->serverident,"403",$channel_name,"No such channel");return}
-        $channel->set_topic($user,$topic);
+        if(not defined $channel){$user->send($user->serverident,"403",$user->nick,$channel_name,"No such channel");return}
+        if(defined $msg->{params}[1]){
+            my $topic = $msg->{params}[1];
+            $channel->set_topic($user,$topic);
+        }
+        else{
+            $user->send($user->serverident,"332",$user->nick,$channel_name,$channel->topic);
+        }
     });
     $user;
 }
