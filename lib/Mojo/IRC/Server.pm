@@ -90,7 +90,7 @@ sub new_user{
         elsif($msg->{command} eq "PONG"){$user->emit(pong=>$msg);$s->emit(pong=>$user,$msg);}
         elsif($msg->{command} eq "MODE"){$user->emit(mode=>$msg);$s->emit(mode=>$user,$msg);}
         elsif($msg->{command} eq "PRIVMSG"){$user->emit(privmsg=>$msg);$s->emit(privmsg=>$user,$msg);}
-        elsif($msg->{command} eq "QUIT"){$user->emit(quit=>$msg);$s->emit(quit=>$user,$msg);}
+        elsif($msg->{command} eq "QUIT"){$user->is_quit(1);$user->emit(quit=>$msg);$s->emit(quit=>$user,$msg);}
         elsif($msg->{command} eq "WHO"){$user->emit(who=>$msg);$s->emit(who=>$user,$msg);}
         elsif($msg->{command} eq "WHOIS"){$user->emit(whois=>$msg);$s->emit(whois=>$user,$msg);}
         elsif($msg->{command} eq "LIST"){$user->emit(list=>$msg);$s->emit(list=>$user,$msg);}
@@ -100,14 +100,22 @@ sub new_user{
 
     $user->io->on(error=>sub{
         my ($stream, $err) = @_;
-        $s->emit(close_user=>$user);
         $user->emit("close");
+        $s->emit(close_user=>$user);
         $s->debug("C[" .$user->name."] 连接错误: $err");
     });
     $user->io->on(close=>sub{
         my ($stream, $err) = @_;
-        $s->emit(close_user=>$user);
         $user->emit("close");
+        $s->emit(close_user=>$user);
+    });
+    $user->on(close=>sub{
+        return if $user->is_quit;
+        my $quit_reason = "command QUIT not received";
+        $user->forward($user->ident,"QUIT",$quit_reason);
+        $user->is_quit(1);
+        $user->info("[" . $user->name . "] 已退出($quit_reason)");
+        $user->{_server}->remove_user($user);
     });
     $user->on(pass=>sub{my($user,$msg) = @_;my $pass = $msg->{params}[0]; $user->pass($pass);});
     $user->on(nick=>sub{my($user,$msg) = @_;my $nick = $msg->{params}[0];$user->set_nick($nick)});
@@ -227,8 +235,8 @@ sub new_user{
             if(defined $u){
                 my $channel_name = "*";
                 if($u->is_join_channel()){
-                    my $last_channel = ($u->channels)[-1];
-                    $channel_name = $last_channel->name;
+                    my $last_channel = (grep {$_->mode !~ /s/} $u->channels)[-1];
+                    $channel_name = $last_channel->name if defined $last_channel;
                 }
                 $user->send($user->serverident,"352",$user->nick,$channel_name,$u->user,$u->host,$u->servername,$u->nick,"H","0 " . $u->realname);
                 $user->send($user->serverident,"315",$user->nick,$nick,"End of WHO list");
@@ -314,6 +322,7 @@ sub remove_user{
     for(my $i=0;$i<@{$s->user};$i++){
         if($user->id eq $s->user->[$i]->id){
             $_->remove_user($s->user->[$i]->id) for $s->user->[$i]->channels;
+            $user->channel([]);
             splice @{$s->user},$i,1;
             if($user->is_virtual){
                 $s->info("c[".$user->name."] 已被移除");
@@ -422,7 +431,6 @@ sub ready {
 
     $s->on(close_user=>sub{
         my ($s,$user,$msg)=@_;
-        $s->remove_user($user);
     });
 }
 sub run{

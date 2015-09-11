@@ -14,6 +14,7 @@ has ctime => sub{time()};
 has 'last_speek_time';
 has channel => sub{[]};
 has realname => 'unset';
+has is_quit => 0;
 
 sub is_virtual {
     $_[0]->virtual;
@@ -22,7 +23,8 @@ sub quit{
     my $s = shift;
     my $quit_reason = shift || "";
     $s->broadcast($s->ident,"QUIT",$quit_reason);
-    $s->info("[" . $s->nick . "] 已退出($quit_reason)");
+    $s->info("[" . $s->name . "] 已退出($quit_reason)");
+    $s->io->close_gracefully() if not $s->is_virtual;
     $s->{_server}->remove_user($s);
 }
 sub ident{
@@ -35,7 +37,7 @@ sub set_nick{
     my $user = $s->search_user(nick=>$nick);
     if(defined $user and $user->id ne $s->id){
         if($user->is_virtual){
-            $s->{_server}->remove_user($user);
+            $user->quit("虚拟帐号被移除");
             $s->once(close=>sub{$s->{_server}->add_user($user)});
             $s->broadcast($s->ident,NICK => $nick);
             $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");

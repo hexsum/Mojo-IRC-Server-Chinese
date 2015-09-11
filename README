@@ -26,7 +26,7 @@ Mojo-IRC-Server v1.7.2
    make test
    make install
    
-   推荐使用CPAN安装 Mojo::IRC::Server
+   推荐使用cpanm安装 Mojo::IRC::Server
 
 版本更新记录
 
