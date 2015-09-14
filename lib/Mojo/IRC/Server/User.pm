@@ -11,13 +11,31 @@ has virtual => 0;
 has host => sub{$_[0]->virtual?"virtualhost":"hidden"}; 
 has port => sub{$_[0]->virtual?"virtualport":"hidden"}; 
 has ctime => sub{time()};
-has 'last_speek_time';
+has 'last_speak_time';
+has 'last_active_time';
+has ping_count => 0;
+has close_reason => undef;
 has channel => sub{[]};
 has realname => 'unset';
 has is_quit => 0;
+has is_away => 0;
+has away_info => undef;
 
 sub is_virtual {
     $_[0]->virtual;
+}
+sub away {
+    my $s = shift;
+    my $away_info = shift;
+    $s->send($s->serverident,"306",$s->nick,"你已经被标记为离开");
+    $s->is_away(1);
+    $s->away_info($away_info);
+}
+sub back {
+    my $s = shift;
+    $s->send($s->serverident,"305",$s->nick,"你不再被标记为离开");
+    $s->is_away(0); 
+    $s->away_info(undef);
 }
 sub quit{
     my $s = shift;
@@ -119,10 +137,13 @@ sub is_join_channel{
 }
 sub forward{
     my $s = shift;
+    my %unique;
     for my $channel ($s->channels){
         for my $user ($channel->users){
             next if $user->id eq $s->id;
+            next if exists $unique{$user->id};
             $user->send(@_);
+            $unique{$user->id} = 1;
         }
     }
 }
@@ -130,10 +151,13 @@ sub forward{
 sub broadcast{
     my $s = shift; 
     $s->send(@_);
+    my %unique;
     for my $channel ($s->channels){
         for my $user ($channel->users){
             next if $user->id eq $s->id;
+            next if exists $unique{$user->id};
             $user->send(@_);
+            $unique{$user->id} = 1;
         }
     }
 }
@@ -169,7 +193,6 @@ sub send{
     $msg .= defined $trail ? " :$trail" : "";
     $msg .= "\r\n";
     $s->io->write($msg);
-    $s->last_speek_time(time());
     $s->debug("S[".$s->name."] $msg");
 }
 sub is_localhost{
