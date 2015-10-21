@@ -64,7 +64,7 @@ sub set_nick{
             $s->name($nick);
             if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
                 $s->is_registered(1);
-                $s->send($s->serverident,"001",$s->nick,"欢迎来到 Mojo IRC Network " . $s->ident);
+                $s->send($s->serverident,"001",$s->nick,"欢迎来到 Chinese IRC Network " . $s->ident);
                 $s->send($s->serverident,"396",$s->nick,$s->host,"您的主机地址已被隐藏");
             }
         }
@@ -80,7 +80,7 @@ sub set_nick{
         $s->name($nick);
         if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
             $s->is_registered(1);
-            $s->send($s->serverident,"001",$s->nick,"欢迎来到 Mojo IRC Network " . $s->ident);
+            $s->send($s->serverident,"001",$s->nick,"欢迎来到 Chinese IRC Network " . $s->ident);
             $s->send($s->serverident,"396",$s->nick,$s->host,"您的主机地址已被隐藏");
         }
     }

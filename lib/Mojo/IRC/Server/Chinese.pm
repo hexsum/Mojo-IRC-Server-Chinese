@@ -1,6 +1,6 @@
 package Mojo::IRC::Server::Chinese;
 use strict;
-$Mojo::IRC::Server::Chinese::VERSION = "1.7.3";
+$Mojo::IRC::Server::Chinese::VERSION = "1.7.4";
 use Encode;
 use Encode::Locale;
 use Carp;
@@ -16,7 +16,7 @@ use Mojo::IRC::Server::Chinese::Channel;
 has host => "0.0.0.0";
 has port => 6667;
 has listen => undef;
-has network => "Chinese IRC NetWork Powered by Mojolicious";
+has network => "Chinese IRC NetWork";
 has ioloop => sub { Mojo::IOLoop->singleton };
 has parser => sub { Parse::IRC->new };
 has servername => "chinese-irc-server";
@@ -136,7 +136,7 @@ sub new_user{
         $user->realname($msg->{params}[3]);
         if(!$user->is_registered and $user->nick ne "*" and $user->user ne "*"){
             $user->is_registered(1);
-            $user->send($user->serverident,"001",$user->nick,"欢迎来到 Mojo IRC Network " . $user->ident);
+            $user->send($user->serverident,"001",$user->nick,"欢迎来到 Chinese IRC Network " . $user->ident);
             $user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");
         }
     });
