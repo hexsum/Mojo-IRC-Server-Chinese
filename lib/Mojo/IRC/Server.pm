@@ -134,20 +134,11 @@ sub new_user{
         $user->user($msg->{params}[0]);
         #$user->mode($msg->{params}[1]);
         $user->realname($msg->{params}[3]);
-        $user->send($user->serverident,"001",$user->nick,"欢迎来到 Mojo IRC Network " . $user->ident);
-        #$user->send($user->serverident,"002",$user->nick,"Your host is " . $user->servername . ", running version Mojo-IRC-Server-${Mojo::IRC::Server::VERSION}");
-        #$user->send($user->serverident,"003",$user->nick,"This server has been started  " . $user->{_server}->create_time);
-        #$user->send($user->serverident,"004",$user->nick,$user->servername .  "Mojo-IRC-Server-${Mojo::IRC::Server::VERSION} abBcCFioqrRswx abehiIklmMnoOPqQrRstvVz");
-        #$user->send($user->serverident,"005",$user->nick,'RFC2812 IRCD=ngIRCd CHARSET=UTF-8 CASEMAPPING=ascii PREFIX=(qaohv)~&@%+ CHANTYPES=#&+ CHANMODES=beI,k,l,imMnOPQRstVz CHANLIMIT=#&+:10','are supported on this server");
-        #$user->send($user->serverident,"251",$user->nick,$user->servername,"There are 0 users and 0 services on 1 servers");
-        #$user->send($user->serverident,"254",$user->nick,$user->servername,0,"channels formed");
-        #$user->send($user->serverident,"255",$user->nick,$user->servername,"I have 0 users, 0 services and 0 servers");
-        #$user->send($user->serverident,"265",$user->nick,$user->servername,"");
-        #$user->send($user->serverident,"250",$user->nick,$user->servername,"");
-        #$user->send($user->serverident,"375",$user->nick,$user->servername,"- ".$user->servername." message of the day");
-        #$user->send($user->serverident,"372",$user->nick,$user->servername,"- Welcome To Mojo IRC Server");
-        #$user->send($user->serverident,"376",$user->nick,$user->servername,"End of MOTD command");
-        $user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");
+        if(!$user->is_registered and $user->nick ne "*" and $user->user ne "*"){
+            $user->is_registered(1);
+            $user->send($user->serverident,"001",$user->nick,"欢迎来到 Mojo IRC Network " . $user->ident);
+            $user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");
+        }
     });
     $user->on(join=>sub{my($user,$msg) = @_;
         my $channels = $msg->{params}[0];

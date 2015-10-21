@@ -19,6 +19,7 @@ has channel => sub{[]};
 has realname => 'unset';
 has is_quit => 0;
 has is_away => 0;
+has is_registered => 0;
 has away_info => undef;
 
 sub is_virtual {
@@ -61,9 +62,14 @@ sub set_nick{
             $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
             $s->nick($nick);
             $s->name($nick);
+            if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
+                $s->is_registered(1);
+                $s->send($s->serverident,"001",$s->nick,"欢迎来到 Mojo IRC Network " . $s->ident);
+                $s->send($s->serverident,"396",$s->nick,$s->host,"您的主机地址已被隐藏");
+            }
         }
         else{
-            $s->send($s->serverident,"433",$user->nick,$nick,'昵称已经被使用');
+            $s->send($s->serverident,"433",$s->nick,$nick,'昵称已经被使用');
             $s->info("昵称 [$nick] 已经被使用");
         }
     }
@@ -72,6 +78,11 @@ sub set_nick{
         $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
         $s->nick($nick);
         $s->name($nick);
+        if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
+            $s->is_registered(1);
+            $s->send($s->serverident,"001",$s->nick,"欢迎来到 Mojo IRC Network " . $s->ident);
+            $s->send($s->serverident,"396",$s->nick,$s->host,"您的主机地址已被隐藏");
+        }
     }
 }
 sub set_mode{
