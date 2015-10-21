@@ -1,5 +1,5 @@
-package Mojo::IRC::Server::Channel;
-use Mojo::IRC::Server::Base 'Mojo::IRC::Server::Object';
+package Mojo::IRC::Server::Chinese::Channel;
+use Mojo::IRC::Server::Chinese::Base 'Mojo::IRC::Server::Chinese::Object';
 use List::Util qw(first);
 has 'name';
 has id      => sub {lc $_[0]->name};
@@ -15,12 +15,12 @@ sub count {
 }
 sub add_user{
     my $s = shift;
-    my $uid = ref($_[0]) eq "Mojo::IRC::Server::User"?$_[0]->id:$_[0];
+    my $uid = ref($_[0]) eq "Mojo::IRC::Server::Chinese::User"?$_[0]->id:$_[0];
     push @{$s->user},$uid if not $s->is_has_user($uid); 
 }
 sub remove_user{
     my $s = shift;
-    my $uid = ref($_[0]) eq "Mojo::IRC::Server::User"?$_[0]->id:$_[0];
+    my $uid = ref($_[0]) eq "Mojo::IRC::Server::Chinese::User"?$_[0]->id:$_[0];
     for(my $i=0;$i<@{$s->user};$i++){
         if($uid eq $s->user->[$i]){
             splice @{$s->user},$i,1;
@@ -33,7 +33,7 @@ sub remove_user{
 }
 sub is_has_user{
     my $s = shift;
-    my $uid = ref($_[0]) eq "Mojo::IRC::Server::User"?$_[0]->id:$_[0];
+    my $uid = ref($_[0]) eq "Mojo::IRC::Server::Chinese::User"?$_[0]->id:$_[0];
     if(defined $uid){
         return (first {$uid eq $_} @{$s->user})?1:0;
     }

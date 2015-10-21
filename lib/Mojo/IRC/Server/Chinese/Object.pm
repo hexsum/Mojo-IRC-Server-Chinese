@@ -1,5 +1,5 @@
-package Mojo::IRC::Server::Object;
-use Mojo::IRC::Server::Base 'Mojo::EventEmitter';
+package Mojo::IRC::Server::Chinese::Object;
+use Mojo::IRC::Server::Chinese::Base 'Mojo::EventEmitter';
 use Data::Dumper;
 sub dump {
     my $s = shift;

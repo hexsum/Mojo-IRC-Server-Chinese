@@ -1,4 +1,4 @@
-package Mojo::IRC::Server::Base;
+package Mojo::IRC::Server::Chinese::Base;
 use strict;
 use warnings;
 use feature ();

@@ -1,6 +1,6 @@
-package Mojo::IRC::Server;
+package Mojo::IRC::Server::Chinese;
 use strict;
-$Mojo::IRC::Server::VERSION = "1.7.3";
+$Mojo::IRC::Server::Chinese::VERSION = "1.7.3";
 use Encode;
 use Encode::Locale;
 use Carp;
@@ -9,17 +9,17 @@ use Mojo::IOLoop;
 use POSIX ();
 use List::Util qw(first);
 use Fcntl ':flock';
-use Mojo::IRC::Server::Base 'Mojo::EventEmitter';
-use Mojo::IRC::Server::User;
-use Mojo::IRC::Server::Channel;
+use Mojo::IRC::Server::Chinese::Base 'Mojo::EventEmitter';
+use Mojo::IRC::Server::Chinese::User;
+use Mojo::IRC::Server::Chinese::Channel;
 
 has host => "0.0.0.0";
 has port => 6667;
 has listen => undef;
-has network => "Mojo IRC NetWork";
+has network => "Chinese IRC NetWork Powered by Mojolicious";
 has ioloop => sub { Mojo::IOLoop->singleton };
 has parser => sub { Parse::IRC->new };
-has servername => "mojo-irc-server";
+has servername => "chinese-irc-server";
 has clienthost => undef,
 has create_time => sub{POSIX::strftime( '%Y/%m/%d %H:%M:%S', localtime() )};
 has log_level => "info";
@@ -66,7 +66,7 @@ has log => sub{
 
 sub new_user{
     my $s = shift;
-    my $user = $s->add_user(Mojo::IRC::Server::User->new(@_,_server=>$s));
+    my $user = $s->add_user(Mojo::IRC::Server::Chinese::User->new(@_,_server=>$s));
     return $user if $user->is_virtual;
     $user->io->on(read=>sub{
         my($stream,$bytes) = @_;
@@ -283,7 +283,7 @@ sub new_user{
 }
 sub new_channel{
     my $s = shift;
-    $s->add_channel(Mojo::IRC::Server::Channel->new(@_,_server=>$s));
+    $s->add_channel(Mojo::IRC::Server::Chinese::Channel->new(@_,_server=>$s));
 }
 sub add_channel{
     my $s = shift;

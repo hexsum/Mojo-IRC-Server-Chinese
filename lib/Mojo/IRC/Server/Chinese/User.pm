@@ -1,5 +1,5 @@
-package Mojo::IRC::Server::User;
-use Mojo::IRC::Server::Base 'Mojo::IRC::Server::Object';
+package Mojo::IRC::Server::Chinese::User;
+use Mojo::IRC::Server::Chinese::Base 'Mojo::IRC::Server::Chinese::Object';
 use List::Util qw(first);
 has [qw(id name io)];
 has user    => '*';
@@ -106,7 +106,7 @@ sub set_mode{
 sub join_channel{
     my $s = shift;
     my $channel;
-    $channel = ref($_[0]) eq "Mojo::IRC::Server::Channel"?$_[0]:$s->search_channel(id=>$_[0]);
+    $channel = ref($_[0]) eq "Mojo::IRC::Server::Chinese::Channel"?$_[0]:$s->search_channel(id=>$_[0]);
     return if not defined $channel;
     if(not $s->is_join_channel($channel->id)){
         push @{$s->channel},$channel->id;
@@ -122,7 +122,7 @@ sub join_channel{
 }
 sub part_channel{
     my $s = shift;
-    my $channel = ref($_[0]) eq "Mojo::IRC::Server::Channel"?$_[0]:$s->search_channel(id=>$_[0]);
+    my $channel = ref($_[0]) eq "Mojo::IRC::Server::Chinese::Channel"?$_[0]:$s->search_channel(id=>$_[0]);
     my $part_info = $_[1];
     return if not defined $channel;
     $channel->broadcast($s->ident,"PART",$channel->name,$part_info);
@@ -138,7 +138,7 @@ sub part_channel{
 }
 sub is_join_channel{
     my $s = shift;
-    my $cid = ref($_[0]) eq "Mojo::IRC::Server::Channel"?$_[0]->id:$_[0];
+    my $cid = ref($_[0]) eq "Mojo::IRC::Server::Chinese::Channel"?$_[0]->id:$_[0];
     if(defined $cid){
         return (first {$cid eq $_} @{$s->channel})?1:0;    
     }

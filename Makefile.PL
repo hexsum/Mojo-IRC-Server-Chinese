@@ -3,9 +3,9 @@ use ExtUtils::MakeMaker "6.46";
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
 WriteMakefile(
-    NAME              => 'Mojo::IRC::Server',
-    VERSION_FROM      => 'lib/Mojo/IRC/Server.pm', # finds $VERSION
-    DISTNAME            => 'Mojo-IRC-Server',
+    NAME              => 'Mojo::IRC::Server::Chinese',
+    VERSION_FROM      => 'lib/Mojo/IRC/Server/Chinese.pm', # finds $VERSION
+    DISTNAME            => 'Mojo-IRC-Server-Chinese',
     LICENSE             => "perl",
     PREREQ_PM         => {
         "Mojolicious"           => '6.11',
@@ -13,14 +13,14 @@ WriteMakefile(
         "Encode::Locale"        => '1.05',
     }, # e.g., Module::Name => 1.1
     dist              => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean               => { FILES => 'Mojo-IRC-Server-* MANIFEST' },
+    clean               => { FILES => 'Mojo-IRC-Server-Chinese-* MANIFEST' },
     META_MERGE => {
         'meta-spec' => { version => 2 },
         resources => {     
             repository=>{
                 type    => 'git',
-                url     => 'git://github.com/sjdy521/Mojo-IRC-Server.git',
-                web     =>  'https://github.com/sjdy521/Mojo-IRC-Server',
+                url     => 'git://github.com/sjdy521/Mojo-IRC-Server-Chinese.git',
+                web     =>  'https://github.com/sjdy521/Mojo-IRC-Server-Chinese',
             },
         },
     },
