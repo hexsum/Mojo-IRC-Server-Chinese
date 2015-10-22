@@ -1,0 +1,41 @@
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+Mojo::IRC::Server::Chinese - A Chinese IRC server base on Mojolicious
+
+=head1 SYNOPSIS
+
+    use Mojo::IRC::Server::Chinese;
+    my $server = Mojo::IRC::Server::Chinese->new(
+        host        =>  "0.0.0.0",
+        port        =>  6667,
+        log_level   =>  "debug",
+    );
+    $server->run();
+
+=head1 DESCRIPTION
+
+Mojo::IRC::Server::Chinese是一个基于Mojolicious框架的IRC服务器，采用异步事件驱动，纯中文支持（请使用UTF8编码）
+
+支持使用中文昵称、中文频道名称，不限制昵称长度，让该死的只能使用英文字符见鬼去吧，目前只实现了聊天相关的常用功能
+
+=head1 SEE ALSO
+
+L<https://github.com/sjdy521/Mojo-IRC-Server-Chinese>
+
+=head1 AUTHOR
+
+sjdy521, E<lt>sjdy521@163.comE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2014 by sjdy521
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.10.1 or,
+at your option, any later version of Perl 5 you may have available.
+
+=cut
