@@ -313,11 +313,10 @@ sub add_user{
         while(1){
             my $u = $s->search_user(nick=>$user->nick);
             if(defined $u){
-                if($nick =~/\((\d+)\)$/){
+                if($u->nick =~/\((\d+)\)$/){
                     my $num = $1;$num++;$user->nick($nick . "($num)");
                 }
                 else{$user->nick($nick . "(1)")}
-                #$user->send($user->ident,"433",$user->nick,$nick,'昵称已经被使用') 
             }
             else{last};
         }
