@@ -72,10 +72,24 @@ sub new_user{
         my($stream,$bytes) = @_;
         $bytes = $user->buffer . $bytes;
         my $pos = rindex($bytes,"\r\n");
-        my $lines = substr($bytes,0,$pos);
-        my $remains = substr($bytes,$pos+2);
-        $user->buffer($remains);
-        $stream->emit(line=>$_) for split /\r\n/,$lines;
+        if($pos != -1){#\r\n
+            my $lines = substr($bytes,0,$pos);
+            my $remains = substr($bytes,$pos+2);
+            $user->buffer($remains);
+            $stream->emit(line=>$_) for split /\r?\n/,$lines;
+        }
+        else{
+            $pos = rindex($bytes,"\n");
+            if($pos != -1){
+                my $lines = substr($bytes,0,$pos);
+                my $remains = substr($bytes,$pos+1);
+                $user->buffer($remains);
+                $stream->emit(line=>$_) for split /\r?\n/,$lines;
+            }
+            else{
+                $user->buffer($bytes); 
+            }
+        }
     });
     $user->io->on(line=>sub{
         my($stream,$line)  = @_;
