@@ -425,7 +425,7 @@ sub ready {
         @listen = ({host=>$s->host,port=>$s->port});
     }
     for my $listen (@listen){
-        $s->ioloop->server({host=>$listen->{host},port=>$listen->{port}}=>sub{
+        $s->ioloop->server({address=>$listen->{host},port=>$listen->{port}}=>sub{
             my ($loop, $stream) = @_;
             $stream->timeout(0);
             my $id = join ":",(
