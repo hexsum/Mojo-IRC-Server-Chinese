@@ -36,6 +36,10 @@ Mojo::IRC::Server::Chinese是一个基于Mojolicious框架的IRC服务器，采�
 
 L<https://github.com/sjdy521/Mojo-IRC-Server-Chinese>
 
+L<https://github.com/sjdy521/Mojo-Webqq>
+
+L<https://github.com/sjdy521/Mojo-Weixin>
+
 =head1 AUTHOR
 
 sjdy521, E<lt>sjdy521@163.comE<gt>

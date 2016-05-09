@@ -1,13 +1,17 @@
-2015-12-01 Mojo::IRC::Server v1.7.7
+2016-05-09 Mojo::IRC::Server::Chinese v1.7.8
+1）修复设置监听host地址不生效，始终是0.0.0.0的问题
+2）文档完善
+
+2015-12-01 Mojo::IRC::Server::Chinese v1.7.7
 1）修复部分客户端消息\n分割（默认\r\n）导致无法正常登录的问题
 
-2015-11-16 Mojo::IRC::Server v1.7.6
+2015-11-16 Mojo::IRC::Server::Chinese v1.7.6
 1）修复增加多个相同昵称虚拟帐号会导致程序进行死循环的严重bug
 
-2015-10-22 Mojo::IRC::Server v1.7.5
+2015-10-22 Mojo::IRC::Server::Chinese v1.7.5
 1）修复pod文档仍然使用旧的命名空间的bug
 
-2015-10-22 Mojo::IRC::Server v1.7.4
+2015-10-22 Mojo::IRC::Server::Chinese v1.7.4
 1）Mojo::IRC::Server改名为Mojo::IRC::Server::Chinese
 
 2015-10-21 Mojo::IRC::Server v1.7.3
