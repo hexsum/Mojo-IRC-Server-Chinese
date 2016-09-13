@@ -1,6 +1,6 @@
 use lib "../lib/";
-use Mojo::IRC::Server;
-my $server = Mojo::IRC::Server->new(
+use Mojo::IRC::Server::Chinese;
+my $server = Mojo::IRC::Server::Chinese->new(
     port        =>  6667,
     log_level   =>  "debug",
 );
