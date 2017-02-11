@@ -1,3 +1,8 @@
+2017-02-11 Mojo::IRC::Server::Chinese v1.7.9
+1）修复demo例子中的错误
+2）增加 user_registered/new_channel 事件
+3）客户端登录成功后服务端返回信息完善
+
 2016-05-09 Mojo::IRC::Server::Chinese v1.7.8
 1）修复设置监听host地址不生效，始终是0.0.0.0的问题
 2）文档完善
