@@ -26,6 +26,26 @@ Mojo::IRC::Server::Chinese - A Chinese IRC server base on Mojolicious
     );
     $server->run();
 
+    #登录验证支持
+    my $server = Mojo::IRC::Server::Chinese->new(
+        log_level   =>  "debug",
+        listen      => [
+            {host=>"0.0.0.0",port=>6667},
+            {host=>"0.0.0.0",port=>6668},
+        ],
+        auth        => sub{
+            my($nick,$user,$pass) = @_; #传递给验证函数的三个参数依次是 irc客户端的NICK/USER/PASS
+            if($nick eq '小灰'){#对于昵称"小灰"进行密码验证
+                return 0 if not defined $pass; #没有设置密码，验证失败
+                return 0 if $pass ne '123456'; #设置的密码不是 "123456" 验证失败
+                return 1; #验证成功，允许正常登录
+            }
+            else{return 1;}#对其他登录昵称不进行验证，全部允许登录
+        },
+    );
+    $server->run();
+    
+
 =head1 DESCRIPTION
 
 Mojo::IRC::Server::Chinese是一个基于Mojolicious框架的IRC服务器，采用异步事件驱动，纯中文支持（请使用UTF8编码）

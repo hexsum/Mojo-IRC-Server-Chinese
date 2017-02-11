@@ -1,6 +1,6 @@
 package Mojo::IRC::Server::Chinese;
 use strict;
-$Mojo::IRC::Server::Chinese::VERSION = "1.7.9";
+$Mojo::IRC::Server::Chinese::VERSION = "1.8.0";
 use Encode;
 use Encode::Locale;
 use Carp;
