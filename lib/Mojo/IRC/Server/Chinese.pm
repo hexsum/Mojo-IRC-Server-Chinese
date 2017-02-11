@@ -24,6 +24,7 @@ has clienthost => undef,
 has create_time => sub{POSIX::strftime( '%Y/%m/%d %H:%M:%S', localtime() )};
 has log_level => "info";
 has log_path => undef;
+has auth=>undef;
 
 has version => sub{$Mojo::IRC::Server::Chinese::VERSION};
 has start_time => sub{time};
@@ -99,7 +100,8 @@ sub new_user{
         my $msg = $s->parser->parse($line);
         $user->last_active_time(time());
         $s->emit(user_msg=>$user,$msg);
-        if($msg->{command} eq "PASS"){$user->emit(pass=>$msg)}
+        if($msg->{command} eq "CAP"){$user->emit(cap=>$msg)}
+        elsif($msg->{command} eq "PASS"){$user->emit(pass=>$msg)}
         elsif($msg->{command} eq "NICK"){$user->emit(nick=>$msg);$s->emit(nick=>$user,$msg);}
         elsif($msg->{command} eq "USER"){$user->emit(user=>$msg);$s->emit(user=>$user,$msg);}
         elsif($msg->{command} eq "JOIN"){$user->emit(join=>$msg);$s->emit(join=>$user,$msg);}
@@ -153,12 +155,6 @@ sub new_user{
         $user->realname($msg->{params}[3]);
         if(!$user->is_registered and $user->nick ne "*" and $user->user ne "*"){
             $user->is_registered(1);
-            $user->send($user->serverident,"001",$user->nick,"Welcome to " . $s->network . " " .  $user->ident);
-            $user->send($user->serverident,"002",$user->nick,"Your host is " . $s->servername. ", running version " . $s->version);
-            $user->send($user->serverident,"003",$user->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->start_time)));
-            $user->send($user->serverident,"004",$user->nick,$s->servername." " .$s->version . " DOQRSZaghilopswz Pbis");
-            #$user->send($user->serverident,"001",$user->nick,"欢迎来到 Chinese IRC Network " . $user->ident);
-            #$user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");
         }
     });
     $user->on(join=>sub{my($user,$msg) = @_;
@@ -457,6 +453,23 @@ sub ready {
         $s->debug("C[".$user->name. "]已连接");
     });
 
+    $s->on(user_registered=>sub{
+        my($s,$user) = @_;
+        if(defined $s->auth and ref $s->auth eq "CODE"){
+            if(! $s->auth->($user->nick,$user->user,$user->pass)){
+                $user->send($user->serverident,"464",$user->nick,"认证失败");
+                $user->io->close_gracefully();
+                $user->{_server}->remove_user($user);
+                return;
+            }
+        }
+        $user->send($user->serverident,"001",$user->nick,"Welcome to " . $s->network . " " .  $user->ident);
+        $user->send($user->serverident,"002",$user->nick,"Your host is " . $s->servername. ", running version " . $s->version);
+        $user->send($user->serverident,"003",$user->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->start_time)));
+        $user->send($user->serverident,"004",$user->nick,$s->servername." " .$s->version . " DOQRSZaghilopswz Pbis");
+        #$user->send($user->serverident,"001",$user->nick,"欢迎来到 Chinese IRC Network " . $user->ident);
+        #$user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");    
+    });
     $s->on(user_msg=>sub{
         my ($s,$user,$msg)=@_;
         $s->debug("C[".$user->name."] $msg->{raw_line}");
@@ -480,6 +493,7 @@ sub ready {
         }
     });
 }
+
 sub run{
     my $s = shift;
     $s->ready();

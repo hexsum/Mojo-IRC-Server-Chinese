@@ -72,10 +72,6 @@ sub set_nick{
             $s->name($nick);
             if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
                 $s->is_registered(1);
-                $s->send($s->serverident,"001",$s->nick,"Welcome to " . $s->{_server}->network . " " .  $s->ident);
-                $s->send($s->serverident,"002",$s->nick,"Your host is " . $s->{_server}->servername. ", running version " . $s->{_server}->version);
-                $s->send($s->serverident,"003",$s->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->{_server}->start_time)));
-                $s->send($s->serverident,"004",$s->nick,$s->{_server}->servername." " .$s->{_server}->version . " DOQRSZaghilopswz Pbis");
             }
         }
         else{
@@ -84,16 +80,18 @@ sub set_nick{
         }
     }
     else{
+        if(defined $s->{_server}->auth and ref $s->{_server}->auth eq "CODE"){
+            if(! $s->{_server}->auth->($nick,$s->user,$s->pass)){
+                $s->send($s->serverident,"464",$s->nick,"认证失败");
+                return;
+            }
+        }
         $s->broadcast($s->ident,NICK => $nick);
         $s->info("[" . $s->nick . "] 修改昵称为 [$nick]");
         $s->nick($nick);
         $s->name($nick);
         if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
             $s->is_registered(1);
-            $s->send($s->serverident,"001",$s->nick,"Welcome to " . $s->{_server}->network . " " .  $s->ident);
-            $s->send($s->serverident,"002",$s->nick,"Your host is " . $s->{_server}->servername. ", running version " . $s->{_server}->version);
-            $s->send($s->serverident,"003",$s->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->{_server}->start_time)));
-            $s->send($s->serverident,"004",$s->nick,$s->{_server}->servername." " .$s->{_server}->version . " DOQRSZaghilopswz Pbis");
         }
     }
 }
