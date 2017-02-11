@@ -19,9 +19,17 @@ has channel => sub{[]};
 has realname => 'unset';
 has is_quit => 0;
 has is_away => 0;
-has is_registered => 0;
 has away_info => undef;
 
+sub is_registered {
+    my $s = shift;
+    if(@_==0){return $s->{is_registered}}
+    else{
+        $s->{is_registered} = $_[0];
+        $s->{_server}->emit(user_registered=>$s);
+    }
+    return $s;
+}
 sub is_virtual {
     $_[0]->virtual;
 }
@@ -64,8 +72,10 @@ sub set_nick{
             $s->name($nick);
             if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
                 $s->is_registered(1);
-                $s->send($s->serverident,"001",$s->nick,"欢迎来到 Chinese IRC Network " . $s->ident);
-                $s->send($s->serverident,"396",$s->nick,$s->host,"您的主机地址已被隐藏");
+                $s->send($s->serverident,"001",$s->nick,"Welcome to " . $s->{_server}->network . " " .  $s->ident);
+                $s->send($s->serverident,"002",$s->nick,"Your host is " . $s->{_server}->servername. ", running version " . $s->{_server}->version);
+                $s->send($s->serverident,"003",$s->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->{_server}->start_time)));
+                $s->send($s->serverident,"004",$s->nick,$s->{_server}->servername." " .$s->{_server}->version . " DOQRSZaghilopswz Pbis");
             }
         }
         else{
@@ -80,8 +90,10 @@ sub set_nick{
         $s->name($nick);
         if(!$s->is_registered and $s->nick ne "*" and $s->user ne "*"){
             $s->is_registered(1);
-            $s->send($s->serverident,"001",$s->nick,"欢迎来到 Chinese IRC Network " . $s->ident);
-            $s->send($s->serverident,"396",$s->nick,$s->host,"您的主机地址已被隐藏");
+            $s->send($s->serverident,"001",$s->nick,"Welcome to " . $s->{_server}->network . " " .  $s->ident);
+            $s->send($s->serverident,"002",$s->nick,"Your host is " . $s->{_server}->servername. ", running version " . $s->{_server}->version);
+            $s->send($s->serverident,"003",$s->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->{_server}->start_time)));
+            $s->send($s->serverident,"004",$s->nick,$s->{_server}->servername." " .$s->{_server}->version . " DOQRSZaghilopswz Pbis");
         }
     }
 }

@@ -25,6 +25,9 @@ has create_time => sub{POSIX::strftime( '%Y/%m/%d %H:%M:%S', localtime() )};
 has log_level => "info";
 has log_path => undef;
 
+has version => sub{$Mojo::IRC::Server::Chinese::VERSION};
+has start_time => sub{time};
+
 has user => sub {[]};
 has channel => sub {[]};
 
@@ -150,8 +153,12 @@ sub new_user{
         $user->realname($msg->{params}[3]);
         if(!$user->is_registered and $user->nick ne "*" and $user->user ne "*"){
             $user->is_registered(1);
-            $user->send($user->serverident,"001",$user->nick,"欢迎来到 Chinese IRC Network " . $user->ident);
-            $user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");
+            $user->send($user->serverident,"001",$user->nick,"Welcome to " . $s->network . " " .  $user->ident);
+            $user->send($user->serverident,"002",$user->nick,"Your host is " . $s->servername. ", running version " . $s->version);
+            $user->send($user->serverident,"003",$user->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->start_time)));
+            $user->send($user->serverident,"004",$user->nick,$s->servername." " .$s->version . " DOQRSZaghilopswz Pbis");
+            #$user->send($user->serverident,"001",$user->nick,"欢迎来到 Chinese IRC Network " . $user->ident);
+            #$user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");
         }
     });
     $user->on(join=>sub{my($user,$msg) = @_;
@@ -297,7 +304,8 @@ sub new_user{
 }
 sub new_channel{
     my $s = shift;
-    $s->add_channel(Mojo::IRC::Server::Chinese::Channel->new(@_,_server=>$s));
+    my $channel = $s->add_channel(Mojo::IRC::Server::Chinese::Channel->new(@_,_server=>$s));
+    $s->emit(new_channel=>$channel);
 }
 sub add_channel{
     my $s = shift;
