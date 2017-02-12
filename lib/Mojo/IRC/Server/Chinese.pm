@@ -100,8 +100,8 @@ sub new_user{
         my $msg = $s->parser->parse($line);
         $user->last_active_time(time());
         $s->emit(user_msg=>$user,$msg);
-        if($msg->{command} eq "CAP"){$user->emit(cap=>$msg)}
-        elsif($msg->{command} eq "PASS"){$user->emit(pass=>$msg)}
+        if($msg->{command} eq "CAP"){$user->emit(cap=>$msg);$s->emit(cap=>$user,$msg);}
+        elsif($msg->{command} eq "PASS"){$user->emit(pass=>$msg);$s->emit(pass=>$user,$msg);}
         elsif($msg->{command} eq "NICK"){$user->emit(nick=>$msg);$s->emit(nick=>$user,$msg);}
         elsif($msg->{command} eq "USER"){$user->emit(user=>$msg);$s->emit(user=>$user,$msg);}
         elsif($msg->{command} eq "JOIN"){$user->emit(join=>$msg);$s->emit(join=>$user,$msg);}
@@ -302,6 +302,7 @@ sub new_channel{
     my $s = shift;
     my $channel = $s->add_channel(Mojo::IRC::Server::Chinese::Channel->new(@_,_server=>$s));
     $s->emit(new_channel=>$channel);
+    return $channel;
 }
 sub add_channel{
     my $s = shift;
@@ -468,7 +469,7 @@ sub ready {
         $user->send($user->serverident,"003",$user->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->start_time)));
         $user->send($user->serverident,"004",$user->nick,$s->servername." " .$s->version . " DOQRSZaghilopswz Pbis");
         #$user->send($user->serverident,"001",$user->nick,"欢迎来到 Chinese IRC Network " . $user->ident);
-        #$user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");    
+        $user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");    
     });
     $s->on(user_msg=>sub{
         my ($s,$user,$msg)=@_;
