@@ -26,6 +26,25 @@ Mojo::IRC::Server::Chinese - A Chinese IRC server base on Mojolicious
     );
     $server->run();
 
+    #TLS加密支持
+    my $server = Mojo::IRC::Server::Chinese->new(
+        log_level   =>  "debug",
+        listen      => [
+            {host=>"0.0.0.0",port=>6667},
+            {host=>"0.0.0.0",port=>6697,tls=>1},
+        ],
+    );
+    $server->run();
+
+    #TLS更多详细参数使用说明参见 https://metacpan.org/pod/Mojo::IOLoop::Server#tls
+    tls                 #0|1 是否启用tls加密
+    tls_ca              #可选，本地ca证书路径 例如 /etc/tls/ca.crt
+    tls_cert            #可选，服务器证书路径，默认会生成一个测试证书
+    tls_ciphers         #可选，加密套件，例如 AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH
+    tls_key             #可选，服务器证书key文件路径
+    tls_verify          #可选，验证模式
+    tls_version         #可选，协议版本，例如 TLSv1_2
+
     #登录验证支持
     my $server = Mojo::IRC::Server::Chinese->new(
         log_level   =>  "debug",

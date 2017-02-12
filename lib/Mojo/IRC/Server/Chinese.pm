@@ -424,13 +424,17 @@ sub ready {
     my $s = shift;
     my @listen = ();
     if(defined $s->listen and ref $s->listen eq "ARRAY"){
-        push @listen,{host=>$_->{host} || "0.0.0.0",port=>$_->{port}||"6667"} for @{$s->listen} ;
+        for (@{$s->listen}){
+            $_->{address} = (delete $_->{host}) // "0.0.0.0";
+            $_->{port} = ($_->{tls} ? 6697: 6667) if not defined $_->{port};
+            push @listen,$_;
+        }
     }
     else{
         @listen = ({host=>$s->host,port=>$s->port});
     }
     for my $listen (@listen){
-        $s->ioloop->server({address=>$listen->{host},port=>$listen->{port}}=>sub{
+        $s->ioloop->server($listen=>sub{
             my ($loop, $stream) = @_;
             $stream->timeout(0);
             my $id = join ":",(
