@@ -61,6 +61,7 @@ sub ident{
 sub set_nick{
     my $s = shift;
     my $nick = shift;
+    $nick =~s/\s|\@|!//g;
     my $user = $s->search_user(nick=>$nick);
     if(defined $user and $user->id ne $s->id){
         if($user->is_virtual){
