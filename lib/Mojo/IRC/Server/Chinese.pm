@@ -470,7 +470,7 @@ sub ready {
         }
         $user->send($user->serverident,"001",$user->nick,"Welcome to " . $s->network . " " .  $user->ident);
         $user->send($user->serverident,"002",$user->nick,"Your host is " . $s->servername. ", running version " . $s->version);
-        $user->send($user->serverident,"003",$user->nick,"This server was created " . POSIX::strftime('%a %b %d %y at %H:%M:%S %Z',localtime($s->start_time)));
+        $user->send($user->serverident,"003",$user->nick,"This server was created " . POSIX::strftime('%a %b %d %Y at %H:%M:%S %Z',localtime($s->start_time)));
         $user->send($user->serverident,"004",$user->nick,$s->servername." " .$s->version . " DOQRSZaghilopswz Pbis");
         #$user->send($user->serverident,"001",$user->nick,"欢迎来到 Chinese IRC Network " . $user->ident);
         $user->send($user->serverident,"396",$user->nick,$user->host,"您的主机地址已被隐藏");    
