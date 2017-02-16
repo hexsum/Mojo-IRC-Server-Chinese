@@ -38,12 +38,14 @@ sub away {
     my $away_info = shift;
     $s->send($s->serverident,"306",$s->nick,"你已经被标记为离开");
     $s->is_away(1);
+    $s->set_mode("+a");
     $s->away_info($away_info);
 }
 sub back {
     my $s = shift;
     $s->send($s->serverident,"305",$s->nick,"你不再被标记为离开");
-    $s->is_away(0); 
+    $s->is_away(0);
+    $s->set_mode("-a");
     $s->away_info(undef);
 }
 sub quit{
